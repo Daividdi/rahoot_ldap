@@ -10,6 +10,7 @@
 
 import { db, normName, getISOWeek } from "@rahoot/socket/services/db"
 import { progressInLevel } from "@rahoot/socket/services/progression"
+import { getPlayerBadges, BADGE_CATALOG_PUBLIC } from "@rahoot/socket/services/badges"
 
 export interface ProfilePayload {
   player: {
@@ -49,6 +50,8 @@ export interface ProfilePayload {
   }>
   monthly: { rank: number | null; points: number; games: number } | null
   weekly: { rank: number | null; points: number; games: number } | null
+  badges: Array<{ id: string; label: string; description: string; emoji: string; category: string; unlockedAt: string }>
+  catalog: typeof BADGE_CATALOG_PUBLIC
 }
 
 function findPlayerId(realName: string): string | null {
@@ -146,7 +149,7 @@ function getPeriodStanding(playerId: string, column: "week_iso" | "month_iso", v
 export function getProfile(realName: string): ProfilePayload {
   const id = findPlayerId(realName)
   if (!id) {
-    return { player: null, progression: null, recentSessions: [], monthly: null, weekly: null }
+    return { player: null, progression: null, recentSessions: [], monthly: null, weekly: null, badges: [], catalog: BADGE_CATALOG_PUBLIC }
   }
   const now = new Date()
   const weekIso = getISOWeek(now)
@@ -158,5 +161,7 @@ export function getProfile(realName: string): ProfilePayload {
     recentSessions: getRecentSessions(id, 10),
     monthly: getPeriodStanding(id, "month_iso", monthIso),
     weekly: getPeriodStanding(id, "week_iso", weekIso),
+    badges: getPlayerBadges(id),
+    catalog: BADGE_CATALOG_PUBLIC,
   }
 }

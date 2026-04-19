@@ -40,6 +40,8 @@ type ProfilePayload = {
   }>
   monthly: { rank: number | null; points: number; games: number } | null
   weekly: { rank: number | null; points: number; games: number } | null
+  badges: Array<{ id: string; label: string; description: string; emoji: string; category: string; unlockedAt: string }>
+  catalog: Array<{ id: string; label: string; description: string; emoji: string; category: string }>
 }
 
 const getStoredName = (): string => { try { return localStorage.getItem(STORAGE_KEY) || "" } catch { return "" } }
@@ -271,6 +273,11 @@ const PlayerHomeCard = () => {
         </div>
       )}
 
+      {/* Badges shelf */}
+      {profile && profile.catalog && profile.catalog.length > 0 && (
+        <BadgeShelf earned={profile.badges} catalog={profile.catalog} />
+      )}
+
       {/* Action: Enter PIN */}
       {!pinMode ? (
         <div className="flex flex-col gap-2">
@@ -329,6 +336,57 @@ function Stat({ label, value, highlight }: { label: string; value: number | stri
     <div className={`flex flex-col items-center rounded-xl bg-gray-50 px-2 py-2 ring-1 ring-gray-100 ${highlight ? "bg-amber-50 ring-amber-200" : ""}`}>
       <span className="text-base font-bold tabular-nums text-gray-800">{value}</span>
       <span className="text-[9px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+    </div>
+  )
+}
+
+type BadgeEarned = { id: string; label: string; description: string; emoji: string; category: string; unlockedAt: string }
+type BadgeCatalogItem = { id: string; label: string; description: string; emoji: string; category: string }
+
+function BadgeShelf({ earned, catalog }: { earned: BadgeEarned[]; catalog: BadgeCatalogItem[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const earnedIds = new Set(earned.map(b => b.id))
+  // Show earned first (newest unlock first), then locked in catalog order.
+  const ordered = [
+    ...earned,
+    ...catalog.filter(c => !earnedIds.has(c.id)).map(c => ({ ...c, unlockedAt: "" })),
+  ]
+  const visible = showAll ? ordered : ordered.slice(0, 8)
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Conquistas</span>
+        <span className="text-[10px] font-bold tabular-nums text-primary">
+          {earned.length} <span className="text-gray-400">/ {catalog.length}</span>
+        </span>
+      </div>
+      <div className="grid grid-cols-8 gap-1.5">
+        {visible.map(b => {
+          const unlocked = earnedIds.has(b.id)
+          return (
+            <div
+              key={b.id}
+              title={`${b.label} — ${b.description}${unlocked ? "" : " (bloqueado)"}`}
+              className={`flex aspect-square items-center justify-center rounded-lg text-lg transition-all ${
+                unlocked
+                  ? "bg-gradient-to-br from-amber-50 to-amber-100 shadow ring-1 ring-amber-200 hover:scale-110"
+                  : "bg-gray-100 text-gray-300 grayscale opacity-50"
+              }`}
+            >
+              <span aria-hidden>{b.emoji}</span>
+            </div>
+          )
+        })}
+      </div>
+      {ordered.length > 8 && (
+        <button
+          onClick={() => setShowAll(s => !s)}
+          className="self-center text-[10px] font-semibold text-gray-400 hover:text-primary"
+        >
+          {showAll ? "Mostrar menos" : `Ver todas (${ordered.length})`}
+        </button>
+      )}
     </div>
   )
 }

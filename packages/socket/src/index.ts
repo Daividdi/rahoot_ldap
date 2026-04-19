@@ -4,6 +4,7 @@ import env from "@rahoot/socket/env"
 import Config from "@rahoot/socket/services/config"
 import { Database } from "@rahoot/socket/services/db"
 import { backfillXpFromExistingSessions } from "@rahoot/socket/services/sessionRecorder"
+import { backfillBadgesForAll, BADGE_CATALOG_PUBLIC } from "@rahoot/socket/services/badges"
 import Game from "@rahoot/socket/services/game"
 import Registry from "@rahoot/socket/services/registry"
 import { withGame } from "@rahoot/socket/utils/game"
@@ -23,6 +24,7 @@ const io: Server = new ServerIO({
 Config.init()
 Database.init()
 const _bf = backfillXpFromExistingSessions(); if (_bf.updated > 0) console.log(`[xp] backfilled ${_bf.updated} rows across ${_bf.playersTouched} players`)
+const _bb = backfillBadgesForAll(); if (_bb.badgesAwarded > 0) console.log(`[badges] awarded ${_bb.badgesAwarded} badges across ${_bb.playersTouched} players (backfill)`)
 
 const registry = Registry.getInstance()
 // In-memory cache: gameId → last fullResults payload

@@ -12,6 +12,7 @@
 
 import { randomUUID } from "node:crypto"
 import { db, getISOWeek, normName } from "@rahoot/socket/services/db"
+import { checkAndAwardBadges, BadgeUnlock } from "@rahoot/socket/services/badges"
 import {
   xpForSession,
   longestStreak,
@@ -55,12 +56,12 @@ export function recordSession(
   quizTitle: string,
   mode: "classic" | "solo" | "team",
   stats: RecorderStatInput[]
-): { sessionId: string; awarded: Array<{ playerId: string; xpGained: number; newLevel: number; newTier: string }> } {
+): { sessionId: string; awarded: Array<{ playerId: string; xpGained: number; newLevel: number; newTier: string; newBadges: BadgeUnlock[] }> } {
   const now = new Date().toISOString()
   const weekIso = getISOWeek(new Date(now))
   const monthIso = now.slice(0, 7)
   const sessionId = randomUUID()
-  const awarded: Array<{ playerId: string; xpGained: number; newLevel: number; newTier: string }> = []
+  const awarded: Array<{ playerId: string; xpGained: number; newLevel: number; newTier: string; newBadges: BadgeUnlock[] }> = []
 
   const insSession = db().prepare(
     `INSERT INTO sessions (id, quiz_id, quiz_title, mode, started_at, ended_at, week_iso, month_iso)
@@ -148,7 +149,8 @@ export function recordSession(
         playerId
       )
 
-      awarded.push({ playerId, xpGained, newLevel, newTier })
+      const newBadges = checkAndAwardBadges(playerId)
+      awarded.push({ playerId, xpGained, newLevel, newTier, newBadges })
     }
     db().exec("COMMIT")
   } catch (e) {
