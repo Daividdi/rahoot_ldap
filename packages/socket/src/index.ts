@@ -2,6 +2,7 @@ import { Server } from "@rahoot/common/types/game/socket"
 import { inviteCodeValidator } from "@rahoot/common/validators/auth"
 import env from "@rahoot/socket/env"
 import Config from "@rahoot/socket/services/config"
+import { Database } from "@rahoot/socket/services/db"
 import Game from "@rahoot/socket/services/game"
 import Registry from "@rahoot/socket/services/registry"
 import { withGame } from "@rahoot/socket/utils/game"
@@ -17,6 +18,7 @@ const io: Server = new ServerIO({
   cors: { origin: [env.WEB_ORIGIN] },
 })
 Config.init()
+Database.init()
 
 const registry = Registry.getInstance()
 // In-memory cache: gameId → last fullResults payload
