@@ -30,6 +30,17 @@ function currentMonthIso(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
+/**
+ * ISO week of (now - 7 days). Used for the weekly ranking, which intentionally
+ * shows the most recently CLOSED week — teachers announce weekly winners on
+ * Monday morning, so the display locks to the finished week until the next Monday.
+ */
+function lastWeekIso(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 7)
+  return getISOWeek(d)
+}
+
 type PeriodOrder = "points" | "games"
 
 function periodLeaderboard(
@@ -221,13 +232,13 @@ export interface LeaderboardsBundle {
 }
 
 export function getAllLeaderboards(): LeaderboardsBundle {
-  const wk = currentWeekIso()
+  const wk = lastWeekIso()
   const mo = currentMonthIso()
   return {
     week: {
       iso: wk,
-      label: wk.replace(/^(\d{4})-W(\d+)$/, "Semana $2 / $1"),
-      top: getCurrentWeekLeaderboard(10),
+      label: wk.replace(/^(\d{4})-W(\d+)$/, "Semana $2 / $1 (encerrada)"),
+      top: periodLeaderboard("week_iso", wk, 10, "games"),
     },
     month: {
       iso: mo,

@@ -201,7 +201,7 @@ export default function RankingPage() {
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">Ranking</h1>
             <p className="text-sm text-white/60">
-              Somente partidas em modo clássico contam. Modo solo conta para XP mas não para ranking.
+              O ranking semanal mostra a última semana encerrada (atualiza toda segunda). Só partidas em modo clássico contam — solo vale XP mas não ranking.
             </p>
           </div>
           <Button onClick={() => router.push("/")}>Voltar</Button>
@@ -254,7 +254,7 @@ export default function RankingPage() {
               </div>
               <LeaderTable
                 rows={active?.top ?? []}
-                period={tab === "week" ? "esta semana" : "este mês"}
+                period={tab === "week" ? "a semana passada" : "este mês"}
               />
             </div>
 
