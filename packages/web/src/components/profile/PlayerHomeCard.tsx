@@ -223,7 +223,7 @@ const PlayerHomeCard = () => {
         <div className="relative shrink-0">
           <Link
             href="/avatar"
-            title="Trocar avatar"
+            title="Change avatar"
             className="block h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow transition hover:scale-105"
           >
             {effectiveAvatarUrl ? (
@@ -309,7 +309,7 @@ const PlayerHomeCard = () => {
               href="/avatar"
               className="text-[11px] font-semibold text-gray-400 hover:text-primary"
             >
-              Trocar avatar →
+              Change avatar →
             </Link>
           </div>
         </div>

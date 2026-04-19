@@ -41,15 +41,15 @@ type ProfileResp = {
 }
 
 const ANIM_LABEL: Record<string, { label: string; emoji: string }> = {
-  "idle-offensive": { label: "Pronto", emoji: "🥊" },
-  "idle-fight": { label: "Luta", emoji: "🥋" },
-  jump: { label: "Pulo", emoji: "🦘" },
-  "jump-rope": { label: "Pular corda", emoji: "🪢" },
-  look: { label: "Olhar", emoji: "👀" },
-  "look-around": { label: "Observar", emoji: "🔎" },
-  "magic-spell": { label: "Magia", emoji: "🪄" },
-  "magic-attack": { label: "Ataque", emoji: "⚡" },
-  search: { label: "Procurar", emoji: "📂" },
+  "idle-offensive": { label: "Ready", emoji: "🥊" },
+  "idle-fight": { label: "Fight", emoji: "🥋" },
+  jump: { label: "Jump", emoji: "🦘" },
+  "jump-rope": { label: "Jump rope", emoji: "🪢" },
+  look: { label: "Look", emoji: "👀" },
+  "look-around": { label: "Look around", emoji: "🔎" },
+  "magic-spell": { label: "Magic", emoji: "🪄" },
+  "magic-attack": { label: "Attack", emoji: "⚡" },
+  search: { label: "Search", emoji: "📂" },
   texting: { label: "Texting", emoji: "📱" },
 }
 
@@ -69,25 +69,25 @@ const BACKGROUNDS: BgPreset[] = [
   },
   {
     id: "sky",
-    label: "Céu",
+    label: "Sky",
     css: "linear-gradient(180deg, #7ec8ff 0%, #bae1ff 55%, #fff7d6 100%)",
     swatch: "linear-gradient(180deg, #7ec8ff, #fff7d6)",
   },
   {
     id: "sunset",
-    label: "Pôr-do-sol",
+    label: "Sunset",
     css: "linear-gradient(180deg, #ff9a6b 0%, #ff5f8f 55%, #6f3d9e 100%)",
     swatch: "linear-gradient(180deg, #ff9a6b, #6f3d9e)",
   },
   {
     id: "forest",
-    label: "Floresta",
+    label: "Forest",
     css: "linear-gradient(180deg, #2e5d4b 0%, #68a683 55%, #c6ebc5 100%)",
     swatch: "linear-gradient(180deg, #2e5d4b, #c6ebc5)",
   },
   {
     id: "night",
-    label: "Noite",
+    label: "Night",
     css: "radial-gradient(ellipse at 50% 10%, #3b2f75 0%, #110a2b 60%, #000000 100%)",
     swatch: "radial-gradient(circle at 50% 30%, #3b2f75, #000)",
   },
@@ -125,14 +125,14 @@ const HAIR_COLORS = [
   "d2691e", "e8c41a", "daa520", "c0c0c0",
 ]
 const ACCESSORIES = [
-  { id: "none", label: "Nenhum" },
-  { id: "glasses", label: "Óculos" },
+  { id: "none", label: "None" },
+  { id: "glasses", label: "Glasses" },
   { id: "sunglasses", label: "Shades" },
-  { id: "catEars", label: "Orelhas" },
-  { id: "sailormoonCrown", label: "Coroa" },
-  { id: "mustache", label: "Bigode" },
-  { id: "faceMask", label: "Máscara" },
-  { id: "clownNose", label: "Palhaço" },
+  { id: "catEars", label: "Cat Ears" },
+  { id: "sailormoonCrown", label: "Crown" },
+  { id: "mustache", label: "Mustache" },
+  { id: "faceMask", label: "Mask" },
+  { id: "clownNose", label: "Clown" },
   { id: "sleepMask", label: "Sleep" },
   { id: "hijab", label: "Hijab" },
 ]
@@ -143,24 +143,24 @@ const HIJAB_COLORS = [
   "87ceeb", "e6a8d7", "cc7a6f", "b5651d",
 ]
 const HIJAB_EXPRESSIONS = [
-  { id: "smile", eyes: "happy", mouth: "smile", label: "Feliz" },
-  { id: "default", eyes: "default", mouth: "default", label: "Neutro" },
-  { id: "serious", eyes: "default", mouth: "serious", label: "Sério" },
-  { id: "wink", eyes: "wink", mouth: "twinkle", label: "Piscada" },
-  { id: "surprised", eyes: "surprised", mouth: "disbelief", label: "Surpreso" },
-  { id: "shy", eyes: "squint", mouth: "smile", label: "Tímido" },
-  { id: "sad", eyes: "cry", mouth: "sad", label: "Triste" },
-  { id: "cool", eyes: "hearts", mouth: "twinkle", label: "Apaixonado" },
+  { id: "smile", eyes: "happy", mouth: "smile", label: "Happy" },
+  { id: "default", eyes: "default", mouth: "default", label: "Neutral" },
+  { id: "serious", eyes: "default", mouth: "serious", label: "Serious" },
+  { id: "wink", eyes: "wink", mouth: "twinkle", label: "Wink" },
+  { id: "surprised", eyes: "surprised", mouth: "disbelief", label: "Surprised" },
+  { id: "shy", eyes: "squint", mouth: "smile", label: "Shy" },
+  { id: "sad", eyes: "cry", mouth: "sad", label: "Sad" },
+  { id: "cool", eyes: "hearts", mouth: "twinkle", label: "In Love" },
 ]
 const BS_EXPRESSIONS = [
-  { id: "cheery", label: "Feliz" },
+  { id: "cheery", label: "Happy" },
   { id: "normal", label: "Normal" },
-  { id: "starstruck", label: "Estrela" },
-  { id: "winking", label: "Piscada" },
-  { id: "confused", label: "Confuso" },
-  { id: "sleepy", label: "Sonolento" },
-  { id: "sad", label: "Triste" },
-  { id: "angry", label: "Bravo" },
+  { id: "starstruck", label: "Star" },
+  { id: "winking", label: "Wink" },
+  { id: "confused", label: "Confused" },
+  { id: "sleepy", label: "Sleepy" },
+  { id: "sad", label: "Sad" },
+  { id: "angry", label: "Angry" },
 ]
 
 const randomItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
@@ -271,8 +271,8 @@ export default function AvatarPickerPage() {
       <section className="min-h-screen w-full bg-gradient-angel px-4 py-10 text-white">
         <div className="mx-auto max-w-xl rounded-2xl bg-white/10 p-6 ring-1 ring-white/20 backdrop-blur">
           <h1 className="text-2xl font-bold">Avatar</h1>
-          <p className="mt-2 text-white/80">Registre seu nome na tela inicial antes de escolher um avatar.</p>
-          <div className="mt-4"><Button onClick={() => router.push("/")}>Voltar</Button></div>
+          <p className="mt-2 text-white/80">Register your name on the home screen before choosing an avatar.</p>
+          <div className="mt-4"><Button onClick={() => router.push("/")}>Back</Button></div>
         </div>
       </section>
     )
@@ -293,9 +293,9 @@ export default function AvatarPickerPage() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <Button onClick={() => router.push("/")}>← Voltar</Button>
+              <Button onClick={() => router.push("/")}>← Back</Button>
               <div>
-                <h1 className="text-2xl font-extrabold">Escolher avatar</h1>
+                <h1 className="text-2xl font-extrabold">Choose avatar</h1>
                 <div className="mt-1 flex items-center gap-2 text-sm text-white/80">
                   <span className="truncate">{realName}</span>
                   <TierBadge tier={tier as TierId} level={level} size="sm" />
@@ -304,7 +304,7 @@ export default function AvatarPickerPage() {
             </div>
             {savedFlash && (
               <div className="rounded-full bg-emerald-400/25 px-3 py-1 text-xs font-bold text-emerald-100 ring-1 ring-emerald-300/60">
-                ✓ Avatar salvo
+                ✓ Avatar saved
               </div>
             )}
           </div>
@@ -319,7 +319,7 @@ export default function AvatarPickerPage() {
               tab === "classic" ? "bg-white text-indigo-900 shadow-lg" : "bg-white/10 text-white/80 hover:bg-white/20"
             )}
           >
-            Clássico
+            Classic
           </button>
           <button
             onClick={() => setTab("3d")}
@@ -346,12 +346,12 @@ export default function AvatarPickerPage() {
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Buscar avatar…"
+                placeholder="Search avatar…"
                 className="mb-3 w-full rounded-xl bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/50 ring-1 ring-white/20 focus:outline-none focus:ring-white/50"
               />
-              {!catalog && <div className="py-10 text-center text-sm text-white/60">Carregando…</div>}
+              {!catalog && <div className="py-10 text-center text-sm text-white/60">Loading…</div>}
               {catalog && catalog.ok === false && (
-                <div className="py-10 text-center text-sm text-red-200">Catálogo indisponível.</div>
+                <div className="py-10 text-center text-sm text-red-200">Catalog unavailable.</div>
               )}
               <div className="grid max-h-[60vh] grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
                 {filtered.map(a => {
@@ -397,12 +397,12 @@ export default function AvatarPickerPage() {
                 <div className="flex h-full flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs uppercase tracking-wider text-white/50">Selecionado</div>
+                      <div className="text-xs uppercase tracking-wider text-white/50">Selected</div>
                       <div className="flex items-center gap-2">
                         <div className="text-lg font-bold text-white">{selected.displayName}</div>
                         {isFavorite && (
                           <span className="rounded-full bg-amber-300 px-2 py-0.5 text-[10px] font-black text-indigo-900 shadow">
-                            ★ Favorito
+                            ★ Favorite
                           </span>
                         )}
                       </div>
@@ -414,7 +414,7 @@ export default function AvatarPickerPage() {
                         autoRotate ? "bg-amber-300/20 text-amber-100 ring-amber-300/60" : "bg-white/10 text-white/80 ring-white/20 hover:bg-white/20"
                       )}
                     >
-                      {autoRotate ? "⏸ Pausar rotação" : "↻ Auto-rotação"}
+                      {autoRotate ? "⏸ Pause rotation" : "↻ Auto-rotate"}
                     </button>
                   </div>
 
@@ -443,14 +443,14 @@ export default function AvatarPickerPage() {
                         className="absolute inset-0"
                       />
                       <div className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/80">
-                        arraste para girar · rolagem para zoom
+                        drag to rotate · scroll to zoom
                       </div>
                     </div>
                   </div>
 
                   {/* Backgrounds */}
                   <div>
-                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Cenário</div>
+                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Scene</div>
                     <div className="flex flex-wrap gap-2">
                       {BACKGROUNDS.map(p => (
                         <button
@@ -474,7 +474,7 @@ export default function AvatarPickerPage() {
 
                   {/* Animations */}
                   <div>
-                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Animações</div>
+                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Animations</div>
                     <div className="flex flex-wrap gap-2">
                       {animations.map(a => {
                         const meta = ANIM_LABEL[a.id] ?? { label: a.label, emoji: "🎬" }
@@ -507,12 +507,12 @@ export default function AvatarPickerPage() {
                           : "bg-white text-indigo-900 hover:brightness-110"
                       )}
                     >
-                      {isFavorite ? "★ Favorito (salvo)" : "★ Favoritar este avatar"}
+                      {isFavorite ? "★ Favorited (saved)" : "★ Favorite this avatar"}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="py-24 text-center text-white/60">Nenhum avatar selecionado</div>
+                <div className="py-24 text-center text-white/60">No avatar selected</div>
               )}
             </div>
           </div>
@@ -603,7 +603,7 @@ function ClassicPane({
           </button>
           <div className="text-center">
             <div className="text-[11px] font-bold text-white">{realName}</div>
-            <div className="text-[10px] text-white/50">Avatar Clássico (DiceBear)</div>
+            <div className="text-[10px] text-white/50">Classic Avatar (DiceBear)</div>
           </div>
         </div>
 
@@ -612,11 +612,11 @@ function ClassicPane({
             onClick={handleSave}
             className="flex-1 rounded-xl bg-white px-4 py-2 text-sm font-bold text-indigo-900 shadow hover:brightness-110 transition"
           >
-            Salvar avatar clássico
+            Save classic avatar
           </button>
           {currentKind === "dicebear" && (
             <span className="rounded-full bg-emerald-400/25 px-3 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/50">
-              Em uso
+              In use
             </span>
           )}
         </div>
@@ -626,7 +626,7 @@ function ClassicPane({
       <div className="rounded-2xl bg-black/30 p-4 ring-1 ring-white/10 backdrop-blur">
         <div className="flex flex-col gap-4">
           <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Pele</div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Skin</div>
             <div className="flex flex-wrap gap-2">
               {SKIN_COLORS.map(c => (
                 <button
@@ -644,7 +644,7 @@ function ClassicPane({
           </div>
 
           <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Acessório</div>
+            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Accessory</div>
             <div className="flex flex-wrap gap-1.5">
               {ACCESSORIES.map(a => (
                 <button
@@ -664,7 +664,7 @@ function ClassicPane({
           {accessory !== "hijab" ? (
             <>
               <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Cor do cabelo</div>
+                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Hair color</div>
                 <div className="flex flex-wrap gap-2">
                   {HAIR_COLORS.map(c => (
                     <button
@@ -682,7 +682,7 @@ function ClassicPane({
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Estilo</div>
+                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Style</div>
                 <div className="flex flex-wrap gap-1.5">
                   {HAIR_STYLES.map(h => (
                     <button
@@ -700,7 +700,7 @@ function ClassicPane({
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Expressão</div>
+                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Expression</div>
                 <div className="flex flex-wrap gap-1.5">
                   {BS_EXPRESSIONS.map(e => (
                     <button
@@ -720,7 +720,7 @@ function ClassicPane({
           ) : (
             <>
               <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Cor do hijab</div>
+                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Hijab color</div>
                 <div className="flex flex-wrap gap-2">
                   {HIJAB_COLORS.map(c => (
                     <button
@@ -738,7 +738,7 @@ function ClassicPane({
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Expressão</div>
+                <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Expression</div>
                 <div className="flex flex-wrap gap-1.5">
                   {HIJAB_EXPRESSIONS.map(e => (
                     <button
