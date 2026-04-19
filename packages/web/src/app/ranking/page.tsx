@@ -15,6 +15,9 @@ interface LeaderRow {
   realName: string
   username: string
   avatarJson: string | null
+  avatarKind: "dicebear" | "3d"
+  avatar3dId: string | null
+  avatar3dIcon?: string | null
   points: number
   games: number
   tier: TierId
@@ -45,6 +48,9 @@ type LeaderboardsResp =
   | { ok: false; reason: string }
 
 function avatarUrlFrom(row: LeaderRow): string {
+  if (row.avatarKind === "3d" && row.avatar3dId) {
+    return `/api/avatar3d/r3/icons/${row.avatar3dId}.png`
+  }
   const seed = encodeURIComponent(row.realName || row.playerId)
   if (!row.avatarJson) {
     return `/api/avatar?style=bigSmile&seed=${seed}`

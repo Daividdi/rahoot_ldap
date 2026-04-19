@@ -16,7 +16,13 @@ const AVATAR_KEY = "rahoot_avatar_cfg"
 type TierId = "bronze" | "silver" | "gold" | "platinum" | "mythic"
 
 type ProfilePayload = {
-  player: { realName: string; username: string } | null
+  player: {
+    realName: string
+    username: string
+    avatarKind?: "dicebear" | "3d"
+    avatar3dId?: string | null
+    avatar3d?: { id: string; icon: string; vrm: string; displayName: string } | null
+  } | null
   progression: {
     xp: number
     level: number
@@ -204,6 +210,9 @@ const PlayerHomeCard = () => {
     ? Math.round((prog.totalCorrect / prog.totalAnswered) * 100)
     : 0
 
+  const is3d = profile?.player?.avatarKind === "3d" && profile?.player?.avatar3d
+  const effectiveAvatarUrl = is3d ? `/api/avatar3d/${profile!.player!.avatar3d!.icon}` : avatarUrl
+
   const monthlyRank = profile?.monthly?.rank ?? null
   const weeklyRank = profile?.weekly?.rank ?? null
 
@@ -212,16 +221,20 @@ const PlayerHomeCard = () => {
       {/* Header: avatar + name + tier */}
       <div className="flex items-center gap-3">
         <div className="relative shrink-0">
-          <div className="h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow">
-            {avatarUrl ? (
+          <Link
+            href="/avatar"
+            title="Trocar avatar"
+            className="block h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow transition hover:scale-105"
+          >
+            {effectiveAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="avatar" className="h-full w-full object-contain p-1" />
+              <img src={effectiveAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
             ) : (
               <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-primary/40">
                 {storedName.charAt(0).toUpperCase()}
               </span>
             )}
-          </div>
+          </Link>
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold text-gray-800">{storedName}</p>
@@ -285,12 +298,20 @@ const PlayerHomeCard = () => {
       {!pinMode ? (
         <div className="flex flex-col gap-2">
           <Button onClick={() => setPinMode(true)}>Entrar em um jogo</Button>
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="text-[11px] font-semibold text-gray-400 hover:text-primary"
-          >
-            {expanded ? "Esconder histórico" : "Ver jogos recentes"}
-          </button>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="text-[11px] font-semibold text-gray-400 hover:text-primary"
+            >
+              {expanded ? "Esconder histórico" : "Ver jogos recentes"}
+            </button>
+            <Link
+              href="/avatar"
+              className="text-[11px] font-semibold text-gray-400 hover:text-primary"
+            >
+              Trocar avatar →
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-2">

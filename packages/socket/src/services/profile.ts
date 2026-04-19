@@ -18,6 +18,9 @@ export interface ProfilePayload {
     realName: string
     username: string
     avatarJson: string | null
+    avatarKind: "dicebear" | "3d"
+    avatar3dId: string | null
+    avatar3d: { id: string; icon: string; vrm: string; displayName: string } | null
     createdAt: string
     lastSeenAt: string
   } | null
@@ -64,13 +67,36 @@ function findPlayerId(realName: string): string | null {
 }
 
 function getPlayerRecord(id: string) {
-  return db()
+  const row = db()
     .prepare(
       `SELECT id, real_name AS realName, username, avatar_json AS avatarJson,
+              avatar_kind AS avatarKind, avatar_3d_id AS avatar3dId,
               created_at AS createdAt, last_seen_at AS lastSeenAt
          FROM players WHERE id = ?`
     )
-    .get(id) as ProfilePayload["player"]
+    .get(id) as any
+  if (!row) return null
+  let avatar3d: { id: string; icon: string; vrm: string; displayName: string } | null = null
+  if (row.avatarKind === "3d" && row.avatar3dId) {
+    try {
+      const mod = require("@rahoot/socket/services/avatars3d")
+      const entry = mod.getAvatarById(row.avatar3dId)
+      if (entry) {
+        avatar3d = { id: entry.id, icon: entry.icon, vrm: entry.vrm, displayName: entry.displayName }
+      }
+    } catch {}
+  }
+  return {
+    id: row.id,
+    realName: row.realName,
+    username: row.username,
+    avatarJson: row.avatarJson,
+    avatarKind: row.avatarKind === "3d" ? "3d" : "dicebear",
+    avatar3dId: row.avatar3dId,
+    avatar3d,
+    createdAt: row.createdAt,
+    lastSeenAt: row.lastSeenAt,
+  }
 }
 
 function getProgression(id: string) {

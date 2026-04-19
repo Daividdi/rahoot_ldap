@@ -16,6 +16,8 @@ export interface LeaderRow {
   realName: string
   username: string
   avatarJson: string | null
+  avatarKind: "dicebear" | "3d"
+  avatar3dId: string | null
   points: number
   games: number
   tier: string
@@ -61,6 +63,8 @@ function periodLeaderboard(
               p.real_name   AS realName,
               p.username    AS username,
               p.avatar_json AS avatarJson,
+              p.avatar_kind AS avatarKind,
+              p.avatar_3d_id AS avatar3dId,
               pp.tier       AS tier,
               pp.level      AS level,
               SUM(sp.points) AS points,
@@ -81,6 +85,8 @@ function periodLeaderboard(
       realName: r.realName,
       username: r.username,
       avatarJson: r.avatarJson,
+      avatarKind: r.avatarKind === "3d" ? "3d" : "dicebear",
+      avatar3dId: r.avatar3dId ?? null,
       points: r.points,
       games: r.games,
       tier: r.tier ?? "bronze",

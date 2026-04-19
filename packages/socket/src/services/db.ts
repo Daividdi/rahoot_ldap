@@ -264,6 +264,19 @@ function migrateFromHistoryJson(): { sessions: number; players: number; sessionP
   return stats
 }
 
+function ensureAvatarKindColumns(): void {
+  const cols = _db!.prepare("PRAGMA table_info(players)").all() as Array<{ name: string }>
+  const names = new Set(cols.map(c => c.name))
+  if (!names.has("avatar_kind")) {
+    _db!.exec("ALTER TABLE players ADD COLUMN avatar_kind TEXT NOT NULL DEFAULT 'dicebear'")
+    console.log("[db] added players.avatar_kind")
+  }
+  if (!names.has("avatar_3d_id")) {
+    _db!.exec("ALTER TABLE players ADD COLUMN avatar_3d_id TEXT")
+    console.log("[db] added players.avatar_3d_id")
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export const Database = {
@@ -276,7 +289,7 @@ export const Database = {
     _db.exec("PRAGMA journal_mode = WAL")
     _db.exec("PRAGMA foreign_keys = ON")
     _db.exec(SCHEMA_SQL)
-    console.log("[db] schema ready")
+    console.log("[db] schema ready"); ensureAvatarKindColumns()
 
     if (!isMigrated()) {
       console.log("[db] migrating history.json …")

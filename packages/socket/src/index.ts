@@ -13,6 +13,7 @@ import { recordSession } from "@rahoot/socket/services/sessionRecorder"
 import { getProfile } from "@rahoot/socket/services/profile"
 import { getSoloQuizFor, submitSoloAttempt } from "@rahoot/socket/services/soloMode"
 import { snapshotClosedWeeks, getAllLeaderboards } from "@rahoot/socket/services/leaderboards"
+import { listAvatars, saveAvatarSelection } from "@rahoot/socket/services/avatars3d"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -385,6 +386,26 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.error("leaderboards:get error:", err);
       socket.emit("leaderboards:data" as any, { ok: false, reason: "server_error" });
+    }
+  });
+
+  socket.on("avatar3d:list" as any, () => {
+    try {
+      const payload = listAvatars();
+      socket.emit("avatar3d:catalog" as any, { ok: true, ...payload });
+    } catch (err) {
+      console.error("avatar3d:list error:", err);
+      socket.emit("avatar3d:catalog" as any, { ok: false, reason: "server_error" });
+    }
+  });
+
+  socket.on("avatar3d:save" as any, (payload: any) => {
+    try {
+      const resp = saveAvatarSelection(payload || {});
+      socket.emit("avatar3d:saved" as any, resp);
+    } catch (err) {
+      console.error("avatar3d:save error:", err);
+      socket.emit("avatar3d:saved" as any, { ok: false, reason: "server_error" });
     }
   });
 
