@@ -3,7 +3,7 @@
 import { QuizzWithId } from "@rahoot/common/types/game"
 import Button from "@rahoot/web/components/Button"
 import clsx from "clsx"
-import { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import toast from "react-hot-toast"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useRouter } from "next/navigation"
@@ -747,9 +747,90 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
         })}
       </div>
 
+      {/* Mode picker */}
       <div className="mt-4">
-        <Button onClick={handleSubmit} className="w-full py-3.5 text-base">Start Training Session</Button>
+        {!selected ? (
+          <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white/50 px-4 py-4 text-center text-xs font-medium text-gray-400">
+            Select a quiz above to choose how to run it
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {/* Classic */}
+            <div className="flex flex-col rounded-xl border-2 border-accent bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">&#127942;</span>
+                <span className="text-sm font-bold text-gray-800">Classic</span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500 leading-snug">
+                Live multiplayer with a PIN. Players join in real-time; podium at the end.
+              </p>
+              <Button onClick={handleSubmit} className="mt-3 py-2 text-sm">Start live session</Button>
+            </div>
+
+            {/* Solo */}
+            <SoloCard selected={selected} selectedQuiz={localList.find((q: any) => q.id === selected) || null} />
+
+            {/* Team vs Team */}
+            <div className="flex flex-col rounded-xl border-2 border-gray-200 bg-white/60 p-4 opacity-60">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">&#9876;</span>
+                  <span className="text-sm font-bold text-gray-800">Team vs Team</span>
+                </div>
+                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">Soon</span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500 leading-snug">
+                Head-to-head teams with shared scores. In development.
+              </p>
+              <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Coming soon</button>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function SoloCard({ selected, selectedQuiz }: { selected: string; selectedQuiz: any | null }) {
+  const [copied, setCopied] = React.useState(false)
+  const soloEnabled = selectedQuiz?.solo?.enabled !== false
+  const url = typeof window !== "undefined" ? window.location.origin + "/solo/" + encodeURIComponent(selected) : ""
+  const handleCopy = async () => {
+    if (!soloEnabled) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      toast.success("Link copied — paste into Moodle")
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      toast.error("Could not copy link")
+    }
+  }
+  return (
+    <div className={"flex flex-col rounded-xl border-2 bg-white p-4 shadow-sm " + (soloEnabled ? "border-primary/40" : "border-gray-200 opacity-60")}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">&#128100;</span>
+          <span className="text-sm font-bold text-gray-800">Solo</span>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">Moodle</span>
+      </div>
+      <p className="mt-1 text-[11px] text-gray-500 leading-snug">
+        Individual play. Students answer on their own; final score + answer review (no podium).
+      </p>
+      {soloEnabled ? (
+        <>
+          <div className="mt-2 truncate rounded-md bg-gray-50 px-2 py-1 text-[10px] font-mono text-gray-500" title={url}>{url}</div>
+          <button
+            onClick={handleCopy}
+            className={"mt-2 rounded-lg py-2 text-sm font-semibold transition " + (copied ? "bg-emerald-500 text-white" : "bg-primary text-white hover:brightness-110")}
+          >
+            {copied ? "\u2713 Copied" : "Copy Moodle link"}
+          </button>
+        </>
+      ) : (
+        <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Solo disabled for this quiz</button>
+      )}
     </div>
   )
 }
