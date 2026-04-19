@@ -30,7 +30,20 @@ function currentMonthIso(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-function periodLeaderboard(column: "week_iso" | "month_iso", value: string, limit = 10): LeaderRow[] {
+type PeriodOrder = "points" | "games"
+
+function periodLeaderboard(
+  column: "week_iso" | "month_iso",
+  value: string,
+  limit = 10,
+  orderBy: PeriodOrder = "points"
+): LeaderRow[] {
+  // Weekly ranking prioritises participation (games) over raw score, because
+  // teachers reward the most ACTIVE players of the week — not just the ones
+  // with the highest skill ceiling. Monthly keeps points-first for now.
+  const orderClause = orderBy === "games"
+    ? "ORDER BY games DESC, points DESC"
+    : "ORDER BY points DESC, games DESC"
   return db()
     .prepare(
       `SELECT sp.player_id  AS playerId,
@@ -47,7 +60,7 @@ function periodLeaderboard(column: "week_iso" | "month_iso", value: string, limi
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
         GROUP BY sp.player_id
-        ORDER BY points DESC, games DESC
+        ${orderClause}
         LIMIT ?`
     )
     .all(value, limit)
@@ -65,7 +78,7 @@ function periodLeaderboard(column: "week_iso" | "month_iso", value: string, limi
 }
 
 export function getCurrentWeekLeaderboard(limit = 10): LeaderRow[] {
-  return periodLeaderboard("week_iso", currentWeekIso(), limit)
+  return periodLeaderboard("week_iso", currentWeekIso(), limit, "games")
 }
 
 export function getCurrentMonthLeaderboard(limit = 10): LeaderRow[] {
@@ -111,7 +124,7 @@ export function snapshotClosedWeeks(): { weeksSnapshotted: number; rowsInserted:
   try {
     for (const { w } of distinctWeeks) {
       if (already.has(w)) continue
-      const top = periodLeaderboard("week_iso", w, 10)
+      const top = periodLeaderboard("week_iso", w, 10, "games")
       for (const r of top) {
         ins.run(w, r.playerId, r.rank, r.points, r.games, now)
         rowsDone++
