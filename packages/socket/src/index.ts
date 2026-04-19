@@ -12,6 +12,7 @@ import { appendSession, getPlayerHistory, getMonthlyLeaderboard } from "@rahoot/
 import { recordSession } from "@rahoot/socket/services/sessionRecorder"
 import { getProfile } from "@rahoot/socket/services/profile"
 import { getSoloQuizFor, submitSoloAttempt } from "@rahoot/socket/services/soloMode"
+import { snapshotClosedWeeks, getAllLeaderboards } from "@rahoot/socket/services/leaderboards"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -26,6 +27,7 @@ Config.init()
 Database.init()
 const _bf = backfillXpFromExistingSessions(); if (_bf.updated > 0) console.log(`[xp] backfilled ${_bf.updated} rows across ${_bf.playersTouched} players`)
 const _bb = backfillBadgesForAll(); if (_bb.badgesAwarded > 0) console.log(`[badges] awarded ${_bb.badgesAwarded} badges across ${_bb.playersTouched} players (backfill)`)
+const _sn = snapshotClosedWeeks(); if (_sn.weeksSnapshotted > 0) console.log(`[leaderboards] snapshotted ${_sn.weeksSnapshotted} closed weeks (${_sn.rowsInserted} rows)`)
 
 const registry = Registry.getInstance()
 // In-memory cache: gameId → last fullResults payload
@@ -373,6 +375,16 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.error("solo:submit error:", err);
       socket.emit("solo:result" as any, { ok: false, reason: "server_error" });
+    }
+  });
+
+  socket.on("leaderboards:get" as any, () => {
+    try {
+      const data = getAllLeaderboards();
+      socket.emit("leaderboards:data" as any, { ok: true, data });
+    } catch (err) {
+      console.error("leaderboards:get error:", err);
+      socket.emit("leaderboards:data" as any, { ok: false, reason: "server_error" });
     }
   });
 

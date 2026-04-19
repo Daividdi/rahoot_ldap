@@ -135,7 +135,7 @@ function getPeriodStanding(playerId: string, column: "week_iso" | "month_iso", v
               COUNT(*) AS games
          FROM session_players sp
          JOIN sessions s ON s.id = sp.session_id
-        WHERE s.${column} = ?
+        WHERE s.${column} = ? AND s.mode = 'classic'
         GROUP BY sp.player_id
         ORDER BY points DESC`
     )

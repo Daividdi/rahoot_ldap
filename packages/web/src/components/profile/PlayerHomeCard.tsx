@@ -7,6 +7,7 @@ import XpBar from "@rahoot/web/components/profile/XpBar"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
 import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
 
 const STORAGE_KEY = "rahoot_real_name"
@@ -261,17 +262,19 @@ const PlayerHomeCard = () => {
         <Stat label="Acerto"   value={`${accuracy}%`} />
       </div>
 
-      {/* Rank strip */}
-      {(monthlyRank || weeklyRank) && (
-        <div className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2 ring-1 ring-primary/10">
-          <div className="text-[11px] font-semibold text-primary/80">
-            {weeklyRank ? <>Semana: <span className="font-bold">#{weeklyRank}</span></> : <>Sem ranking semanal</>}
-          </div>
-          <div className="text-[11px] font-semibold text-primary/80">
-            {monthlyRank ? <>Mês: <span className="font-bold">#{monthlyRank}</span></> : <>Sem ranking mensal</>}
-          </div>
+      {/* Rank strip — clicks through to /ranking */}
+      <Link
+        href="/ranking"
+        className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2 ring-1 ring-primary/10 transition hover:bg-primary/10 hover:ring-primary/30"
+      >
+        <div className="text-[11px] font-semibold text-primary/80">
+          {weeklyRank ? <>Semana: <span className="font-bold">#{weeklyRank}</span></> : <>Sem ranking semanal</>}
         </div>
-      )}
+        <div className="text-[11px] font-semibold text-primary/80">
+          {monthlyRank ? <>Mês: <span className="font-bold">#{monthlyRank}</span></> : <>Sem ranking mensal</>}
+        </div>
+        <div className="text-[11px] font-bold text-primary/70">Ver ranking →</div>
+      </Link>
 
       {/* Badges shelf */}
       {profile && profile.catalog && profile.catalog.length > 0 && (
