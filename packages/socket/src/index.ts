@@ -11,6 +11,7 @@ import { withGame } from "@rahoot/socket/utils/game"
 import { appendSession, getPlayerHistory, getMonthlyLeaderboard } from "@rahoot/socket/services/history"
 import { recordSession } from "@rahoot/socket/services/sessionRecorder"
 import { getProfile } from "@rahoot/socket/services/profile"
+import { getSoloQuizFor, submitSoloAttempt } from "@rahoot/socket/services/soloMode"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -350,6 +351,29 @@ io.on("connection", (socket) => {
       const profile = getProfile(realName || "");
       socket.emit("player:profile" as any, profile);
     } catch (err) { console.error("Profile fetch error:", err); }
+  });
+
+  socket.on("solo:getQuiz" as any, ({ quizId, realName }: any) => {
+    try {
+      const resp = getSoloQuizFor(String(quizId || ""), String(realName || ""));
+      socket.emit("solo:quiz" as any, resp);
+    } catch (err) {
+      console.error("solo:getQuiz error:", err);
+      socket.emit("solo:quiz" as any, { ok: false, reason: "server_error" });
+    }
+  });
+
+  socket.on("solo:submit" as any, (payload: any) => {
+    try {
+      const resp = submitSoloAttempt(payload || {});
+      socket.emit("solo:result" as any, resp);
+      if ((resp as any).ok) {
+        console.log("[solo] " + payload.realName + " completed " + payload.quizId + " (attempt " + (resp as any).attemptNumber + "/" + (resp as any).maxAttempts + ", +" + (resp as any).xpGained + " XP)");
+      }
+    } catch (err) {
+      console.error("solo:submit error:", err);
+      socket.emit("solo:result" as any, { ok: false, reason: "server_error" });
+    }
   });
 
   // Re-emit cached full results to a player who missed the initial broadcast
