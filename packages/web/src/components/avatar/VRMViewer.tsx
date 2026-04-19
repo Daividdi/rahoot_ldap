@@ -35,7 +35,6 @@ export default function VRMViewer({
     disposed: boolean
   }>({ clock: new THREE.Clock(), disposed: false })
 
-  // One-time setup per mount
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -43,7 +42,7 @@ export default function VRMViewer({
     st.disposed = false
 
     const w = host.clientWidth || 320
-    const h = host.clientHeight || 360
+    const h = host.clientHeight || 420
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
@@ -52,15 +51,15 @@ export default function VRMViewer({
 
     const scene = new THREE.Scene()
     if (background !== "transparent") scene.background = new THREE.Color(background)
-    const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 20)
+    const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 50)
     camera.position.set(0, 1.4, 3)
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 1.3, 0)
+    controls.target.set(0, 1.0, 0)
     controls.enableDamping = true
-    controls.minDistance = 1.5
-    controls.maxDistance = 5
-    controls.minPolarAngle = Math.PI / 3
-    controls.maxPolarAngle = Math.PI / 1.8
+    controls.minDistance = 0.8
+    controls.maxDistance = 8
+    controls.minPolarAngle = Math.PI / 6
+    controls.maxPolarAngle = Math.PI / 1.6
     controls.autoRotate = autoRotate
     controls.autoRotateSpeed = 1.2
     controls.update()
@@ -80,7 +79,7 @@ export default function VRMViewer({
     const onResize = () => {
       if (!st.renderer || !st.camera) return
       const W = host.clientWidth || 320
-      const H = host.clientHeight || 360
+      const H = host.clientHeight || 420
       st.renderer.setSize(W, H)
       st.camera.aspect = W / H
       st.camera.updateProjectionMatrix()
@@ -117,7 +116,6 @@ export default function VRMViewer({
     }
   }, [])
 
-  // Load VRM whenever vrmUrl changes
   useEffect(() => {
     const st = stateRef.current
     if (!st.scene) return
@@ -143,6 +141,25 @@ export default function VRMViewer({
         st.scene!.add(vrm.scene)
         st.vrm = vrm
         st.mixer = new THREE.AnimationMixer(vrm.scene)
+
+        // Auto-fit camera to the loaded avatar: handles short/tall characters.
+        if (st.camera && st.controls) {
+          const box = new THREE.Box3().setFromObject(vrm.scene)
+          const size = new THREE.Vector3()
+          const center = new THREE.Vector3()
+          box.getSize(size)
+          box.getCenter(center)
+
+          const fov = (st.camera.fov * Math.PI) / 180
+          const distance = (size.y / 2) / Math.tan(fov / 2) * 1.35 + size.z * 0.5
+
+          const targetY = center.y + size.y * 0.05
+          st.controls.target.set(center.x, targetY, center.z)
+          st.camera.position.set(center.x, targetY, center.z + distance)
+          st.controls.minDistance = distance * 0.45
+          st.controls.maxDistance = distance * 3
+          st.controls.update()
+        }
       },
       undefined,
       err => console.error("[VRMViewer] load error", err)
@@ -153,7 +170,6 @@ export default function VRMViewer({
     }
   }, [vrmUrl])
 
-  // Load animation
   useEffect(() => {
     const st = stateRef.current
     let cancelled = false
@@ -162,7 +178,6 @@ export default function VRMViewer({
         st.mixer?.stopAllAction()
         return
       }
-      // Wait until vrm + mixer ready (polled)
       const waitFor = async () => {
         for (let i = 0; i < 50; i++) {
           if (cancelled) return false
@@ -189,7 +204,6 @@ export default function VRMViewer({
     }
   }, [animationUrl])
 
-  // Sync autoRotate flag
   useEffect(() => {
     const st = stateRef.current
     if (st.controls) st.controls.autoRotate = autoRotate
