@@ -1,6 +1,6 @@
 "use client"
 
-import Room from "@rahoot/web/components/game/join/Room"
+import PlayerHomeCard from "@rahoot/web/components/profile/PlayerHomeCard"
 import Username from "@rahoot/web/components/game/join/Username"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
@@ -21,11 +21,14 @@ const Home = () => {
     toast.error(message)
   })
 
+  // Once a PIN has been accepted, `player` is set and we switch to the
+  // in-game identity screen (avatar picker + "let's go"). Until then, show
+  // the new Home/Profile card with inline PIN entry.
   if (player) {
     return <Username />
   }
 
-  return <Room />
+  return <PlayerHomeCard />
 }
 
 export default Home

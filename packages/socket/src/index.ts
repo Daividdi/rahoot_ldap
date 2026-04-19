@@ -9,6 +9,7 @@ import Registry from "@rahoot/socket/services/registry"
 import { withGame } from "@rahoot/socket/utils/game"
 import { appendSession, getPlayerHistory, getMonthlyLeaderboard } from "@rahoot/socket/services/history"
 import { recordSession } from "@rahoot/socket/services/sessionRecorder"
+import { getProfile } from "@rahoot/socket/services/profile"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -340,6 +341,13 @@ io.on("connection", (socket) => {
       const leaderboard = getMonthlyLeaderboard(minSessions ?? 1, sortBy ?? 'total');
       socket.emit("player:history" as any, { history, leaderboard });
     } catch (err) { console.error("History fetch error:", err); }
+  });
+
+  socket.on("player:getProfile" as any, ({ realName }: any) => {
+    try {
+      const profile = getProfile(realName || "");
+      socket.emit("player:profile" as any, profile);
+    } catch (err) { console.error("Profile fetch error:", err); }
   });
 
   // Re-emit cached full results to a player who missed the initial broadcast
