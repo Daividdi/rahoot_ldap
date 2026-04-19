@@ -1,0 +1,323 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #009edf;
+  --color-primary-dark: #007ab8;
+  --color-primary-deeper: #005f8a;
+  --color-secondary: #0078b0;
+  --color-accent: #ffd60a;
+  --color-accent-dark: #c9a800;
+  --color-answer-red: #e21b3c;
+  --color-answer-blue: #1368ce;
+  --color-answer-yellow: #ffa602;
+  --color-answer-green: #26890c;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.btn-shadow {
+  box-shadow: rgba(0, 0, 0, 0.25) 0px -4px inset;
+}
+
+.btn-shadow span {
+  display: block;
+  transform: translateY(-2px);
+}
+
+.btn-shadow:hover {
+  box-shadow: rgba(0, 0, 0, 0.25) 0px -2px inset;
+}
+
+.btn-shadow:hover span {
+  transform: translateY(0);
+}
+
+.btn-shadow:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.text-outline {
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.25);
+}
+
+.shadow-inset {
+  box-shadow: rgba(0, 0, 0, 0.25) 0px -4px inset;
+}
+
+@media (min-width: 768px) {
+  .game-pin-out {
+    clip-path: polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%);
+    padding-right: 10px !important;
+  }
+  .game-pin-in {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 9.8% 50%);
+    padding-left: 50px !important;
+    margin-left: -35px;
+  }
+}
+
+.spotlight {
+  position: absolute;
+  height: 200%;
+  width: 200%;
+  z-index: 100;
+  background-image: radial-gradient(
+    circle,
+    transparent 180px,
+    rgba(0, 0, 0, 0.6) 200px
+  );
+  opacity: 0;
+  left: -50%;
+  top: -50%;
+  transition: all 0.5s;
+  animation: spotlightAnim 2.5s ease-in;
+}
+
+@keyframes spotlightAnim {
+  0% {
+    left: -20%;
+    top: -20%;
+  }
+  30% {
+    opacity: 100;
+    top: -80%;
+    left: -80%;
+  }
+  60% {
+    top: -50%;
+    left: -20%;
+  }
+  80% {
+    top: -50%;
+    left: -50%;
+  }
+  98% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.anim-show {
+  animation: show 0.5s ease-out;
+}
+
+.anim-timer {
+  animation: timer 1s ease-out infinite;
+}
+
+.anim-quizz {
+  animation: quizz 0.8s linear;
+  transform: perspective(1200px) rotateY(-15deg) rotateX(15deg)
+    translateZ(100px);
+  box-shadow: 10px 10px 0 rgba(20, 24, 29, 1);
+}
+
+.anim-quizz .button {
+  box-shadow: rgba(0, 0, 0, 0.25) -4px -4px inset;
+  animation: quizzButton 0.8s ease-out;
+}
+
+.anim-balanced {
+  animation: balanced 0.8s linear infinite;
+}
+
+@keyframes balanced {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg) translateY(-10px);
+  }
+  50% {
+    transform: rotate(0deg) translateY(0px);
+  }
+  75% {
+    transform: rotate(10deg) translateY(-10px);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes show {
+  0% {
+    transform: scale(0);
+  }
+  30% {
+    transform: scale(0.9);
+  }
+  60% {
+    transform: scale(0.8);
+  }
+  80% {
+    transform: scale(1);
+  }
+}
+
+@keyframes progressBar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes timer {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.4) rotate(-6deg);
+  }
+  60% {
+    transform: scale(0.8) rotate(6deg);
+  }
+  80% {
+    transform: scale(1);
+  }
+}
+
+@keyframes quizz {
+  0% {
+    transform: scale(0) perspective(1200px) rotateY(-60deg) rotateX(60deg)
+      translateZ(100px);
+  }
+  60% {
+    transform: scale(1) perspective(1200px) rotateY(-15deg) rotateX(15deg)
+      translateZ(100px);
+  }
+  80% {
+    transform: scale(0.8) perspective(1200px) rotateY(-15deg) rotateX(15deg)
+      translateZ(100px);
+  }
+  100% {
+    transform: scale(1) perspective(1200px) rotateY(-15deg) rotateX(15deg)
+      translateZ(100px);
+  }
+}
+
+@keyframes quizzButton {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1);
+  }
+  80% {
+    transform: scale(0.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes float-circle {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(15px, -25px) scale(1.05); }
+}
+@keyframes float-square {
+  0%, 100% { transform: translate(0, 0) rotate(45deg) scale(1); }
+  50% { transform: translate(-15px, -30px) rotate(55deg) scale(1.05); }
+}
+.animate-float-circle {
+  animation: float-circle 4s ease-in-out infinite;
+}
+.animate-float-square {
+  animation: float-square 5s ease-in-out infinite;
+}
+.logo-shadow {
+  text-shadow: 3px 3px 0px rgba(0, 0, 0, 0.3);
+}
+/* Animação para o Triângulo - Movimento em V */
+@keyframes float-triangle {
+  0%, 100% { transform: translate(0, 0) rotate(-2deg); }
+  50% { transform: translate(-50px, 60px) rotate(2deg) scale(1.05); }
+}/* Animação para o Losango - Movimento Lateral */
+@keyframes float-diamond {
+  0%, 100% { transform: translate(0, 0) rotate(45deg); }
+  50% { transform: translate(-50px, 50px) rotate(45deg) scale(0.9); }
+}
+
+.animate-float-triangle { animation: float-triangle 7s ease-in-out infinite; }
+.animate-float-diamond { animation: float-diamond 12s ease-in-out infinite; }
+
+/* Classe para criar a forma do Triângulo */
+.shape-triangle {
+  width: 0; height: 0;
+  border-left: 25vmin solid transparent;
+  border-right: 25vmin solid transparent;
+  border-bottom: 40vmin solid var(--color-primary);
+  opacity: 0.1;
+}
+
+/* Background gradiente Angel TREAT */
+.bg-gradient-angel {
+  background: linear-gradient(135deg, var(--color-primary-deeper) 0%, var(--color-primary) 50%, var(--color-secondary) 100%);
+}
+
+/* Botão 3D estilo Kahoot */
+.btn-3d {
+  box-shadow: 0 4px 0 var(--color-primary-dark);
+  transition: all 0.1s ease;
+}
+.btn-3d:hover {
+  box-shadow: 0 2px 0 var(--color-primary-dark);
+  transform: translateY(2px);
+}
+.btn-3d:active {
+  box-shadow: none;
+  transform: translateY(4px);
+}
+
+.btn-3d-accent {
+  box-shadow: 0 4px 0 var(--color-accent-dark);
+  transition: all 0.1s ease;
+}
+.btn-3d-accent:hover {
+  box-shadow: 0 2px 0 var(--color-accent-dark);
+  transform: translateY(2px);
+}
+.btn-3d-accent:active {
+  box-shadow: none;
+  transform: translateY(4px);
+}
+
+/* Card com sombra 3D */
+.card-3d {
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.12);
+}
+
+/* Icon shape backgrounds */
+.shape-icon {
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Animação de entrada suave */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+/* Pulse suave para loading */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.anim-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
