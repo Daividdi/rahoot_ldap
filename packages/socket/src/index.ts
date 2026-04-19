@@ -3,10 +3,12 @@ import { inviteCodeValidator } from "@rahoot/common/validators/auth"
 import env from "@rahoot/socket/env"
 import Config from "@rahoot/socket/services/config"
 import { Database } from "@rahoot/socket/services/db"
+import { backfillXpFromExistingSessions } from "@rahoot/socket/services/sessionRecorder"
 import Game from "@rahoot/socket/services/game"
 import Registry from "@rahoot/socket/services/registry"
 import { withGame } from "@rahoot/socket/utils/game"
 import { appendSession, getPlayerHistory, getMonthlyLeaderboard } from "@rahoot/socket/services/history"
+import { recordSession } from "@rahoot/socket/services/sessionRecorder"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -19,6 +21,7 @@ const io: Server = new ServerIO({
 })
 Config.init()
 Database.init()
+const _bf = backfillXpFromExistingSessions(); if (_bf.updated > 0) console.log(`[xp] backfilled ${_bf.updated} rows across ${_bf.playersTouched} players`)
 
 const registry = Registry.getInstance()
 // In-memory cache: gameId → last fullResults payload
@@ -316,6 +319,7 @@ io.on("connection", (socket) => {
         // Broadcast full results to everyone in the game room
         try {
           appendSession(targetId, quizTitle, stats);
+          try { const r = recordSession(targetId, quizTitle, "classic", stats); console.log("[xp] session " + r.sessionId + " awarded xp to " + r.awarded.length + " players"); } catch (xe) { console.error("recordSession error:", xe); }
         } catch (he) { console.error("appendSession error:", he); }
 
         if (gid) {
