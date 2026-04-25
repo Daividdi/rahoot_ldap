@@ -103,6 +103,10 @@ io.on("connection", (socket) => {
     } catch {}
     withGame(gameId, socket, (game) => {
       game.join(socket, data.username, data.deviceInfo, correctedRealName, data.avatarUrl)
+      // If the name was corrected by the manager, tell the player's browser to update localStorage
+      if (correctedRealName !== data.realName) {
+        socket.emit("player:nameCorrection" as any, correctedRealName)
+      }
       // Broadcast updated player list to everyone in the room (players + manager)
       setTimeout(() => {
         const list = buildRoomList(game)
@@ -176,6 +180,20 @@ io.on("connection", (socket) => {
     } catch { callback({}) }
   })
 
+  // Player asks on mount: "do I have an AKA?" — returns corrected name or null
+  socket.on("player:checkName", (callback: any) => {
+    try {
+      const cid = socket.handshake.auth.clientId
+      if (!cid) { callback(null); return }
+      const fs = require("fs")
+      const namesPath = require("path").join(findQuizDir(), "..", "player-names.json")
+      if (fs.existsSync(namesPath)) {
+        const corrections = JSON.parse(fs.readFileSync(namesPath, "utf-8"))
+        callback(corrections[cid] || null)
+      } else { callback(null) }
+    } catch { callback(null) }
+  })
+
   socket.on("manager:updatePlayerName", ({ clientId, correctedName }: any) => {
     try {
       const fs = require("fs")
@@ -184,6 +202,21 @@ io.on("connection", (socket) => {
       if (correctedName && correctedName.trim()) { map[clientId] = correctedName.trim() }
       else { delete map[clientId] }
       fs.writeFileSync(namesPath, JSON.stringify(map, null, 2))
+      // Also update the SQLite players table so rankings and history use the corrected name
+      if (correctedName && correctedName.trim()) {
+        try {
+          const { db } = require("@rahoot/socket/services/db")
+          db().prepare("UPDATE players SET real_name = ? WHERE client_id = ?").run(correctedName.trim(), clientId)
+        } catch {}
+      }
+      // Push corrected name to the player's browser in real-time if they are connected
+      try {
+        for (const [, s] of (io as any).sockets.sockets) {
+          if ((s as any).handshake?.auth?.clientId === clientId) {
+            s.emit("player:nameCorrection", correctedName && correctedName.trim() ? correctedName.trim() : null)
+          }
+        }
+      } catch {}
     } catch (err) { console.error("Error updating player name:", err) }
   })
 

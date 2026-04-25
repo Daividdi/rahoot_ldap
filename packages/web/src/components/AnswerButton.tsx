@@ -14,7 +14,7 @@ const AnswerButton = ({
 }: Props) => (
   <button
     className={clsx(
-      "shadow-inset group relative flex items-center gap-4 rounded-xl px-5 py-5 text-left font-bold text-white transition-all duration-100 active:translate-y-[2px] active:shadow-none hover:brightness-110",
+      "shadow-inset group relative flex items-center gap-4 rounded-xl px-5 py-5 text-left font-bold text-white transition-[filter,transform,box-shadow] duration-100 active:translate-y-[2px] active:shadow-none hover:brightness-110",
       className,
     )}
     {...otherProps}

@@ -47,6 +47,11 @@ type ProfilePayload = {
   }>
   monthly: { rank: number | null; points: number; games: number } | null
   weekly: { rank: number | null; points: number; games: number } | null
+  modeStats?: {
+    classic: { games: number; points: number; correct: number; answered: number }
+    solo:    { games: number; points: number; correct: number; answered: number }
+    team:    { games: number; points: number; correct: number; answered: number }
+  }
   badges: Array<{ id: string; label: string; description: string; emoji: string; category: string; unlockedAt: string }>
   catalog: Array<{ id: string; label: string; description: string; emoji: string; category: string }>
 }
@@ -179,18 +184,18 @@ const PlayerHomeCard = () => {
     return (
       <div className="card-3d z-10 flex w-full max-w-sm flex-col gap-4 rounded-2xl bg-white p-6">
         <div>
-          <h2 className="text-lg font-bold text-gray-800">Bem-vindo!</h2>
-          <p className="text-sm text-gray-400">Nos diga seu nome para salvar seu progresso.</p>
+          <h2 className="text-lg font-bold text-gray-800">Welcome!</h2>
+          <p className="text-sm text-gray-400">Tell us your name to save your progress.</p>
         </div>
         <Input
           value={registerName}
           onChange={(e) => setRegisterName(e.target.value)}
           onKeyDown={onEnter(handleRegister)}
-          placeholder="Seu nome completo"
+          placeholder="Your full name"
           maxLength={40}
           autoFocus
         />
-        <Button onClick={handleRegister}>Continuar</Button>
+        <Button onClick={handleRegister}>Continue</Button>
       </div>
     )
   }
@@ -210,8 +215,12 @@ const PlayerHomeCard = () => {
     ? Math.round((prog.totalCorrect / prog.totalAnswered) * 100)
     : 0
 
-  const is3d = profile?.player?.avatarKind === "3d" && profile?.player?.avatar3d
-  const effectiveAvatarUrl = is3d ? `/api/avatar3d/${profile!.player!.avatar3d!.icon}` : avatarUrl
+  const is3d = profile?.player?.avatarKind === "3d" && !!profile?.player?.avatar3dId
+  const effectiveAvatarUrl = is3d
+    ? (profile?.player?.avatar3d
+        ? `/api/avatar3d/${profile.player.avatar3d.icon}`
+        : `/api/avatar3d/r3/icons/${profile!.player!.avatar3dId}.png`)
+    : avatarUrl
 
   const monthlyRank = profile?.monthly?.rank ?? null
   const weeklyRank = profile?.weekly?.rank ?? null
@@ -245,9 +254,9 @@ const PlayerHomeCard = () => {
         <button
           onClick={() => { saveStoredName(""); setStoredName(""); setProfile(null) }}
           className="shrink-0 text-[10px] text-gray-400 hover:text-primary hover:underline"
-          title="Trocar de usuário"
+          title="Switch user"
         >
-          Não é você?
+          Not you?
         </button>
       </div>
 
@@ -269,11 +278,20 @@ const PlayerHomeCard = () => {
 
       {/* Stats grid */}
       <div className="grid grid-cols-4 gap-2">
-        <Stat label="Jogos"    value={gamesPlayed} />
-        <Stat label="Perfeito" value={perfectGames} highlight={perfectGames > 0} />
+        <Stat label="Games"    value={gamesPlayed} />
+        <Stat label="Perfect"  value={perfectGames} highlight={perfectGames > 0} />
         <Stat label="Streak"   value={longestStreak} />
-        <Stat label="Acerto"   value={`${accuracy}%`} />
+        <Stat label="Accuracy" value={`${accuracy}%`} />
       </div>
+
+      {/* Per-mode breakdown */}
+      {profile?.modeStats && (
+        <div className="grid grid-cols-3 gap-2">
+          <ModePill label="Classic" games={profile.modeStats.classic.games} points={profile.modeStats.classic.points} tone="primary" />
+          <ModePill label="Solo"    games={profile.modeStats.solo.games}    points={profile.modeStats.solo.points}    tone="emerald" />
+          <ModePill label="Team"    games={profile.modeStats.team.games}    points={profile.modeStats.team.points}    tone="gray" disabled />
+        </div>
+      )}
 
       {/* Rank strip — clicks through to /ranking */}
       <Link
@@ -281,12 +299,12 @@ const PlayerHomeCard = () => {
         className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2 ring-1 ring-primary/10 transition hover:bg-primary/10 hover:ring-primary/30"
       >
         <div className="text-[11px] font-semibold text-primary/80">
-          {weeklyRank ? <>Semana: <span className="font-bold">#{weeklyRank}</span></> : <>Sem ranking semanal</>}
+          {weeklyRank ? <>Week: <span className="font-bold">#{weeklyRank}</span></> : <>No weekly ranking</>}
         </div>
         <div className="text-[11px] font-semibold text-primary/80">
-          {monthlyRank ? <>Mês: <span className="font-bold">#{monthlyRank}</span></> : <>Sem ranking mensal</>}
+          {monthlyRank ? <>Month: <span className="font-bold">#{monthlyRank}</span></> : <>No monthly ranking</>}
         </div>
-        <div className="text-[11px] font-bold text-primary/70">Ver ranking →</div>
+        <div className="text-[11px] font-bold text-primary/70">View ranking →</div>
       </Link>
 
       {/* Badges shelf */}
@@ -297,13 +315,13 @@ const PlayerHomeCard = () => {
       {/* Action: Enter PIN */}
       {!pinMode ? (
         <div className="flex flex-col gap-2">
-          <Button onClick={() => setPinMode(true)}>Entrar em um jogo</Button>
+          <Button onClick={() => setPinMode(true)}>Join a game</Button>
           <div className="flex items-center justify-between gap-2">
             <button
               onClick={() => setExpanded(e => !e)}
               className="text-[11px] font-semibold text-gray-400 hover:text-primary"
             >
-              {expanded ? "Esconder histórico" : "Ver jogos recentes"}
+              {expanded ? "Hide history" : "Recent games"}
             </button>
             <Link
               href="/avatar"
@@ -319,16 +337,16 @@ const PlayerHomeCard = () => {
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             onKeyDown={onEnter(handleJoin)}
-            placeholder="Código do jogo"
+            placeholder="Game code"
             autoFocus
           />
           <div className="flex gap-2">
-            <Button onClick={handleJoin} className="flex-1">Entrar</Button>
+            <Button onClick={handleJoin} className="flex-1">Join</Button>
             <button
               onClick={() => { setPinMode(false); setPin("") }}
               className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-400 hover:text-primary"
             >
-              Cancelar
+              Cancel
             </button>
           </div>
         </div>
@@ -337,13 +355,13 @@ const PlayerHomeCard = () => {
       {/* Expanded recent games */}
       {expanded && profile && profile.recentSessions.length > 0 && (
         <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Jogos recentes</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Recent games</p>
           {profile.recentSessions.slice(0, 5).map(s => (
             <div key={s.sessionId} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5">
               <span className="shrink-0 text-[10px] text-gray-400">#{s.rank}</span>
               <span className="flex-1 truncate text-xs font-semibold text-gray-700">{s.quizTitle}</span>
               <span className="shrink-0 text-[10px] font-bold text-primary">+{s.xpGained} XP</span>
-              <span className="shrink-0 text-[10px] text-gray-400">{new Date(s.startedAt).toLocaleDateString("pt-BR")}</span>
+              <span className="shrink-0 text-[10px] text-gray-400">{new Date(s.startedAt).toLocaleDateString("en-US")}</span>
             </div>
           ))}
         </div>
@@ -380,25 +398,28 @@ function BadgeShelf({ earned, catalog }: { earned: BadgeEarned[]; catalog: Badge
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Conquistas</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Achievements</span>
         <span className="text-[10px] font-bold tabular-nums text-primary">
           {earned.length} <span className="text-gray-400">/ {catalog.length}</span>
         </span>
       </div>
-      <div className="grid grid-cols-8 gap-1.5">
+      <div className="grid grid-cols-4 gap-2">
         {visible.map(b => {
           const unlocked = earnedIds.has(b.id)
           return (
             <div
               key={b.id}
-              title={`${b.label} — ${b.description}${unlocked ? "" : " (bloqueado)"}`}
-              className={`flex aspect-square items-center justify-center rounded-lg text-lg transition-all ${
+              title={`${b.description}${unlocked ? "" : " (locked)"}`}
+              className={`flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-center transition-all ${
                 unlocked
-                  ? "bg-gradient-to-br from-amber-50 to-amber-100 shadow ring-1 ring-amber-200 hover:scale-110"
-                  : "bg-gray-100 text-gray-300 grayscale opacity-50"
+                  ? "bg-gradient-to-br from-amber-50 to-amber-100 shadow ring-1 ring-amber-200 hover:scale-105"
+                  : "bg-gray-100 grayscale opacity-50"
               }`}
             >
-              <span aria-hidden>{b.emoji}</span>
+              <span aria-hidden className="text-xl leading-none">{b.emoji}</span>
+              <span className={`w-full truncate text-[9px] font-semibold leading-tight ${
+                unlocked ? "text-amber-800" : "text-gray-400"
+              }`}>{b.label}</span>
             </div>
           )
         })}
@@ -408,7 +429,7 @@ function BadgeShelf({ earned, catalog }: { earned: BadgeEarned[]; catalog: Badge
           onClick={() => setShowAll(s => !s)}
           className="self-center text-[10px] font-semibold text-gray-400 hover:text-primary"
         >
-          {showAll ? "Mostrar menos" : `Ver todas (${ordered.length})`}
+          {showAll ? "Show less" : `View all (${ordered.length})`}
         </button>
       )}
     </div>
@@ -416,3 +437,22 @@ function BadgeShelf({ earned, catalog }: { earned: BadgeEarned[]; catalog: Badge
 }
 
 export default PlayerHomeCard
+
+
+function ModePill({ label, games, points, tone, disabled }: { label: string; games: number; points: number; tone: "primary" | "emerald" | "gray"; disabled?: boolean }) {
+  const toneMap: Record<string, string> = {
+    primary: "bg-primary/10 text-primary ring-primary/20",
+    emerald: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+    gray:    "bg-gray-100 text-gray-400 ring-gray-200",
+  }
+  return (
+    <div className={"rounded-xl px-2 py-1.5 text-center ring-1 " + toneMap[tone] + (disabled ? " opacity-60" : "")}>
+      <div className="text-[9px] font-bold uppercase tracking-wider opacity-80">{label}</div>
+      <div className="mt-0.5 flex items-baseline justify-center gap-1">
+        <span className="text-sm font-extrabold">{games}</span>
+        <span className="text-[9px] opacity-70">games</span>
+      </div>
+      <div className="text-[10px] font-semibold opacity-80">{points.toLocaleString("en-US")} pts</div>
+    </div>
+  )
+}

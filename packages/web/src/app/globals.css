@@ -73,7 +73,7 @@ button:not(:disabled),
   opacity: 0;
   left: -50%;
   top: -50%;
-  transition: all 0.5s;
+  transition: opacity 0.5s, left 0.5s, top 0.5s;
   animation: spotlightAnim 2.5s ease-in;
 }
 
@@ -261,10 +261,27 @@ button:not(:disabled),
   background: linear-gradient(135deg, var(--color-primary-deeper) 0%, var(--color-primary) 50%, var(--color-secondary) 100%);
 }
 
+/* Theme overrides (selected from /avatar settings) */
+html[data-theme="studio"] .bg-gradient-angel {
+  background: linear-gradient(180deg, #2b2746 0%, #4c3f79 60%, #1a1731 100%);
+}
+html[data-theme="sky"] .bg-gradient-angel {
+  background: linear-gradient(180deg, #7ec8ff 0%, #bae1ff 55%, #fff7d6 100%);
+}
+html[data-theme="sunset"] .bg-gradient-angel {
+  background: linear-gradient(180deg, #ff9a6b 0%, #ff5f8f 55%, #6f3d9e 100%);
+}
+html[data-theme="forest"] .bg-gradient-angel {
+  background: linear-gradient(180deg, #2e5d4b 0%, #68a683 55%, #c6ebc5 100%);
+}
+html[data-theme="night"] .bg-gradient-angel {
+  background: radial-gradient(ellipse at 50% 10%, #3b2f75 0%, #110a2b 60%, #000000 100%);
+}
+
 /* Botão 3D estilo Kahoot */
 .btn-3d {
   box-shadow: 0 4px 0 var(--color-primary-dark);
-  transition: all 0.1s ease;
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
 }
 .btn-3d:hover {
   box-shadow: 0 2px 0 var(--color-primary-dark);
@@ -277,7 +294,7 @@ button:not(:disabled),
 
 .btn-3d-accent {
   box-shadow: 0 4px 0 var(--color-accent-dark);
-  transition: all 0.1s ease;
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
 }
 .btn-3d-accent:hover {
   box-shadow: 0 2px 0 var(--color-accent-dark);
@@ -321,3 +338,11 @@ button:not(:disabled),
 .anim-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
+
+/* Explicit answer color utilities (ensure Tailwind v4 scanner picks them up) */
+.bg-answer-red   { background-color: #e21b3c; }
+.bg-answer-blue  { background-color: #1368ce; }
+.bg-answer-yellow{ background-color: #ffa602; }
+.bg-answer-green { background-color: #26890c; }
+
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }

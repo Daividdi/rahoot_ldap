@@ -60,7 +60,7 @@ const Answers = ({
   return (
     <div className="flex h-full flex-1 flex-col justify-between">
       <div className="mx-auto inline-flex h-full w-full max-w-7xl flex-1 flex-col items-center justify-center gap-4 px-4">
-        <h2 className="text-center text-2xl font-bold text-white drop-shadow-lg md:text-4xl lg:text-5xl">
+        <h2 className="text-center text-2xl font-bold text-white drop-shadow-lg md:text-4xl lg:text-5xl [text-wrap:balance]">
           {question}
         </h2>
 
@@ -71,7 +71,7 @@ const Answers = ({
           <video className="m-4 mb-2 aspect-video max-h-60 w-auto rounded-md px-4 sm:max-h-100" src={video} autoPlay controls />
         )}
         {Boolean(image) && (
-          <img alt={question} src={image} className="mb-2 max-h-52 w-auto rounded-xl shadow-xl px-4 sm:max-h-80" />
+          <img alt={question} src={image} className={clsx("mb-2 w-auto rounded-xl shadow-xl px-4", hasAnyAnswerImage ? "max-h-32" : "max-h-52 sm:max-h-80")} style={{ outline: "1px solid rgba(255,255,255,0.12)" }} />
         )}
       </div>
 
@@ -92,14 +92,14 @@ const Answers = ({
                   style={{ transition: "stroke-dashoffset 1s linear, stroke 0.5s" }}
                 />
               </svg>
-              <span className="relative text-xs font-black text-white">{cooldown}</span>
+              <span className="relative text-xs font-black text-white tabular-nums">{cooldown}</span>
             </div>
             <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">Time</span>
           </div>
 
           <div className="flex items-center gap-2 rounded-2xl bg-black/50 backdrop-blur-sm px-5 py-2.5 shadow-md">
             <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">Answers</span>
-            <span className="text-lg font-black text-white">{totalAnswer}</span>
+            <span className="text-lg font-black text-white tabular-nums">{totalAnswer}</span>
             <span className="text-xs text-white/40">/{totalPlayer}</span>
           </div>
         </div>
@@ -112,13 +112,13 @@ const Answers = ({
         </div>
 
         {/* Answer buttons */}
-        <div className={clsx("mx-auto mb-3 grid w-full max-w-7xl gap-2 px-3", hasAnyAnswerImage ? "grid-cols-2" : "grid-cols-2")}>
+        <div className={clsx("mx-auto mb-3 grid w-full max-w-7xl gap-3 px-3", "grid-cols-2")}>
           {answers.map((answer, key) => {
             const img = answerImages?.[key]
             return (
               <AnswerButton
                 key={key}
-                className={clsx(ANSWERS_COLORS[key], answered && "opacity-60 pointer-events-none")}
+                className={clsx(ANSWERS_COLORS[key], answered && "opacity-60 pointer-events-none", img && "!py-3 !items-start")}
                 icon={ANSWERS_ICONS[key]}
                 onClick={handleAnswer(key)}
               >
@@ -128,10 +128,11 @@ const Answers = ({
                     <img
                       src={img}
                       alt=""
-                      className="w-full max-h-24 rounded-lg object-cover shadow-md border border-white/20"
+                      className="w-full rounded-xl object-contain shadow-lg border-2 border-white/30"
+                      style={{ maxHeight: "120px" }}
                     />
                   )}
-                  <span>{answer}</span>
+                  {answer && <span>{answer}</span>}
                 </span>
               </AnswerButton>
             )

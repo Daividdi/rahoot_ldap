@@ -1,3 +1,4 @@
+import ThemeProvider from "@rahoot/web/components/ThemeProvider"
 import Toaster from "@rahoot/web/components/Toaster"
 import { SocketProvider } from "@rahoot/web/contexts/socketProvider"
 import type { Metadata } from "next"
@@ -19,6 +20,7 @@ const RootLayout = ({ children }: PropsWithChildren) => (
   <html lang="en" suppressHydrationWarning={true} data-lt-installed="true">
     <body className={`${montserrat.variable} bg-secondary antialiased`}>
       <SocketProvider>
+        <ThemeProvider />
         <main className="text-base-[8px] flex flex-col">{children}</main>
         <Toaster />
       </SocketProvider>

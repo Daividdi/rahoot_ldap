@@ -26,7 +26,7 @@ const Question = ({ data: { question, image, cooldown } }: Props) => {
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-5">
-        <h2 className="anim-show text-center text-3xl font-bold text-white drop-shadow-lg md:text-4xl lg:text-5xl">
+        <h2 className="anim-show text-center text-3xl font-bold text-white drop-shadow-lg md:text-4xl lg:text-5xl [text-wrap:balance]">
           {question}
         </h2>
 

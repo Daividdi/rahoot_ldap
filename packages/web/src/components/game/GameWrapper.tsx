@@ -90,7 +90,7 @@ const GameWrapper = ({ children, statusName, onNext, manager }: Props) => {
                 <p className="text-sm font-bold text-white/90">{player?.username}</p>
               </div>
               <div className="flex items-center gap-2 rounded-full bg-accent px-4 py-1.5">
-                <span className="text-sm font-black text-gray-900">{player?.points ?? 0}</span>
+                <span className="text-sm font-black text-gray-900 tabular-nums">{player?.points ?? 0}</span>
                 <span className="text-xs font-semibold text-gray-700">pts</span>
               </div>
             </div>

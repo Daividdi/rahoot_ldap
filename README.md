@@ -1,139 +1,116 @@
 <p align="center">
   <img width="450" height="120" align="center" src="https://raw.githubusercontent.com/Ralex91/Rahoot/main/.github/logo.svg">
-  <br>
-  <div align="center">
-    <img alt="Visitor Badge" src="https://api.visitorbadge.io/api/visitors?path=https://github.com/Ralex91/Rahoot/edit/main/README.md&countColor=%2337d67a">
-    <img src="https://img.shields.io/docker/pulls/ralex91/rahoot?style=for-the-badge&color=37d67a" alt="Docker Pulls">
-  </div>
 </p>
-
-## 🧩 What is this project?
-
-Rahoot is a straightforward and open-source clone of the Kahoot! platform, allowing users to host it on their own server for smaller events.
-
-> ⚠️ This project is still under development, please report any bugs or suggestions in the [issues](https://github.com/Ralex91/Rahoot/issues)
 
 <p align="center">
-  <img width="30%" src="https://raw.githubusercontent.com/Ralex91/Rahoot/main/.github/preview1.jpg" alt="Login">
-  <img width="30%" src="https://raw.githubusercontent.com/Ralex91/Rahoot/main/.github/preview2.jpg" alt="Manager Dashboard">
-  <img width="30%" src="https://raw.githubusercontent.com/Ralex91/Rahoot/main/.github/preview3.jpg" alt="Question Screen">
+  <strong>Fork with extended features: 3D avatars, game modes, XP system, rankings and analytics.</strong><br>
+  Based on <a href="https://github.com/Ralex91/Rahoot">Ralex91/Rahoot</a>
 </p>
 
-## ⚙️ Prerequisites
+---
 
-Choose one of the following deployment methods:
+## What this fork adds
 
-### Without Docker
+- **3D avatars** — 100Avatars R3 collection (VRM) with Mixamo animations, rendered in-browser via Three.js
+- **Game modes** — Classic, Solo and Team vs Team
+- **Player profiles** — XP, level progression and tier badges
+- **Weekly ranking** — shows the closed week's leaderboard
+- **Manager dashboard** — analytics per quiz session
+- **Avatar selection screen** — browse and favourite avatars before joining
+- **SQLite persistence** — game history, player names and profiles stored locally
 
-- Node.js : version 20 or higher
-- PNPM : Learn more about [here](https://pnpm.io/)
+---
 
-### With Docker
+## Stack
 
-- Docker and Docker Compose
+| Layer | Tech |
+|---|---|
+| Runtime | Node.js 22, pnpm workspaces |
+| Web | Next.js 15 (standalone output) |
+| Socket | Custom TypeScript server (esbuild) |
+| Proxy | Nginx (Docker) |
+| Data | SQLite (better-sqlite3) + JSON config files |
 
-## 📖 Getting Started
+---
 
-Choose your deployment method:
-
-### 🐳 Using Docker (Recommended)
-
-Using Docker Compose (recommended):
-You can find the docker compose configuration in the repository:
-[docker-compose.yml](/compose.yml)
-
-```bash
-docker compose up -d
-```
-
-Or using Docker directly:
-
-```bash
-docker run -d \
-  -p 3000:3000 \
-  -p 3001:3001 \
-  -v ./config:/app/config \
-  -e WEB_ORIGIN=http://localhost:3000 \
-  -e SOCKET_URL=http://localhost:3001 \
-  ralex91/rahoot:latest
-```
-
-**Configuration Volume:**
-The `-v ./config:/app/config` option mounts a local `config` folder to persist your game settings and quizzes. This allows you to:
-
-- Edit your configuration files directly on your host machine
-- Keep your settings when updating the container
-- Easily backup your quizzes and game configuration
-
-The folder will be created automatically on first run with an example quiz to get you started.
-
-The application will be available at:
-
-- Web Interface: http://localhost:3000
-- WebSocket Server: ws://localhost:3001
-
-### 🛠️ Without Docker
-
-1. Clone the repository:
+## Quick deploy (new server)
 
 ```bash
-git clone https://github.com/Ralex91/Rahoot.git
-cd ./Rahoot
+# 1. Clone the repo
+git clone https://github.com/Daividdi/Rahoot.git
+cd Rahoot
+
+# 2. Run — replaces all setup steps
+./deploy.sh your-domain.com
 ```
 
-2. Install dependencies:
+`deploy.sh` will:
+- Create the `../config/` data directory
+- Seed default `game.json` and example quizzes
+- Generate a `.env` for your domain
+- Download the 3D avatar collection (~590 MB, skipped if already present)
+- Build the Docker image and start all containers (app + nginx)
+
+> **HTTPS:** after deploy, run `certbot --nginx -d your-domain.com`
+
+---
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in the values:
 
 ```bash
-pnpm install
+cp .env.example .env
 ```
 
-3. Change the environment variables in the `.env` file
+| Variable | Description | Example |
+|---|---|---|
+| `WEB_ORIGIN` | Public URL of the web app | `http://rahoot.example.com` |
+| `SOCKET_URL` | Public URL of the socket server | `http://rahoot.example.com:3002` |
+| `TZ` | Server timezone | `America/Sao_Paulo` |
+| `WEB_PORT` | Host port → web container (3000) | `3003` |
+| `SOCKET_PORT` | Host port → socket container (3001) | `3002` |
 
-4. Build and start the application:
+> **Never commit `.env`** — it is already in `.gitignore`. Use `.env.example` as the template.
 
-```bash
-# Development mode
-pnpm run dev
+---
 
-# Production mode
-pnpm run build
-pnpm start
+## Configuration files
+
+All runtime data lives in `../config/` (one level above the repo, created by `deploy.sh`):
+
+```
+config/
+├── game.json          ← master password and global settings
+├── quizz/             ← one JSON file per quiz
+├── rahoot.db          ← SQLite database (players, history, badges)
+├── avatars-3d/        ← 3D avatar models and animations (~590 MB)
+│   ├── r3/models/     ← VRM files
+│   ├── r3/icons/      ← PNG thumbnails
+│   ├── animations/    ← FBX Mixamo animations
+│   └── catalog.json   ← avatar index read by the app
+└── history.json       ← game session history
 ```
 
-## ⚙️ Configuration
-
-The configuration is split into two main parts:
-
-### 1. Game Configuration (`config/game.json`)
-
-Main game settings:
+### game.json
 
 ```json
 {
-  "managerPassword": "PASSWORD",
+  "managerPassword": "change-me",
   "music": true
 }
 ```
 
-Options:
-
-- `managerPassword`: The master password for accessing the manager interface
-- `music`: Enable/disable game music
-
-### 2. Quiz Configuration (`config/quizz/*.json`)
-
-Create your quiz files in the `config/quizz/` directory. You can have multiple quiz files and select which one to use when starting a game.
-
-Example quiz configuration (`config/quizz/example.json`):
+### Quiz format (`config/quizz/my-quiz.json`)
 
 ```json
 {
-  "subject": "Example Quiz",
+  "subject": "My Quiz",
   "questions": [
     {
       "question": "What is the correct answer?",
-      "answers": ["No", "Yes", "No", "No"],
-      "image": "https://images.unsplash.com/....",
+      "answers": ["Wrong", "Correct", "Wrong", "Wrong"],
+      "image": "https://example.com/image.jpg",
       "solution": 1,
       "cooldown": 5,
       "time": 15
@@ -142,35 +119,58 @@ Example quiz configuration (`config/quizz/example.json`):
 }
 ```
 
-Quiz Options:
+| Field | Type | Description |
+|---|---|---|
+| `subject` | string | Quiz title |
+| `question` | string | Question text |
+| `answers` | string[] | 2 to 4 options |
+| `image` | string (optional) | Image URL shown above the question |
+| `solution` | number | Zero-based index of the correct answer |
+| `cooldown` | number | Seconds before the question is shown |
+| `time` | number | Seconds allowed to answer |
 
-- `subject`: Title/topic of the quiz
-- `questions`: Array of question objects containing:
-  - `question`: The question text
-  - `answers`: Array of possible answers (2-4 options)
-  - `image`: Optional URL for question image
-  - `solution`: Index of correct answer (0-based)
-  - `cooldown`: Time in seconds before showing the question
-  - `time`: Time in seconds allowed to answer
+---
 
-## 🎮 How to Play
+## Development
 
-1. Access the manager interface at http://localhost:3000/manager
-2. Enter the manager password (defined in quiz config)
-3. Share the game URL (http://localhost:3000) and room code with participants
-4. Wait for players to join
-5. Click the start button to begin the game
+```bash
+# Start with live reload (mounts source as volume)
+cp .env.example .env   # edit WEB_ORIGIN and SOCKET_URL
+docker compose -f docker-compose.dev.yml up
+```
 
-## 📝 Contributing
+Or without Docker:
 
-1. Fork the repository
-2. Create a new branch (e.g., `feat/my-feature`)
-3. Make your changes
-4. Create a pull request
-5. Wait for review and merge
+```bash
+pnpm install
+# terminal 1
+cd packages/socket && pnpm dev
+# terminal 2
+cd packages/web && pnpm dev
+```
 
-For bug reports or feature requests, please [create an issue](https://github.com/Ralex91/Rahoot/issues).
+---
 
-## ⭐ Star History
+## Rollback
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Ralex91/Rahoot&type=date&legend=bottom-right)](https://www.star-history.com/#Ralex91/Rahoot&type=date&legend=bottom-right)
+```bash
+./rollback.sh list          # list available backups
+./rollback.sh <tag>         # restore from backup
+./rollback.sh <tag> --dry   # preview without touching anything
+```
+
+---
+
+## Re-download 3D avatars
+
+If the `config/avatars-3d/` folder is missing or incomplete:
+
+```bash
+AVATARS_ROOT=../config/avatars-3d node fetch-r3.mjs
+```
+
+---
+
+## Original project
+
+This is a fork of [Ralex91/Rahoot](https://github.com/Ralex91/Rahoot). All original credits apply.

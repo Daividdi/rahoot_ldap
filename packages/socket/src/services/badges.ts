@@ -113,81 +113,81 @@ function hasLevel(playerId: string, minLevel: number): boolean {
 
 export const BADGES: BadgeDef[] = [
   // Participation (6)
-  { id: "welcome",       label: "Primeiro jogo",      description: "Participou do primeiro quiz", emoji: "🎉", category: "participation",
+  { id: "welcome",       label: "First game",      description: "Played your first quiz", emoji: "🎉", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 1 },
-  { id: "first_steps",   label: "Primeiros passos",   description: "Jogou 5 quizzes",             emoji: "👣", category: "participation",
+  { id: "first_steps",   label: "First steps",   description: "Played 5 quizzes",             emoji: "👣", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 5 },
-  { id: "dedicated",     label: "Dedicado",           description: "Jogou 10 quizzes",            emoji: "📚", category: "participation",
+  { id: "dedicated",     label: "Dedicated",           description: "Played 10 quizzes",            emoji: "📚", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 10 },
-  { id: "veteran",       label: "Veterano",           description: "Jogou 25 quizzes",            emoji: "🎖️", category: "participation",
+  { id: "veteran",       label: "Veteran",           description: "Played 25 quizzes",            emoji: "🎖️", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 25 },
-  { id: "legend",        label: "Lenda",              description: "Jogou 50 quizzes",            emoji: "🏅", category: "participation",
+  { id: "legend",        label: "Legend",              description: "Played 50 quizzes",            emoji: "🏅", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 50 },
-  { id: "myth_maker",    label: "Mito",               description: "Jogou 100 quizzes",           emoji: "🌟", category: "participation",
+  { id: "myth_maker",    label: "Myth",               description: "Played 100 quizzes",           emoji: "🌟", category: "participation",
     check: id => (progress(id)?.gamesPlayed ?? 0) >= 100 },
 
   // Skill — perfect games (3)
-  { id: "first_perfect", label: "Gabarito",           description: "Primeiro jogo sem erros",     emoji: "✨", category: "skill",
+  { id: "first_perfect", label: "Perfect round",           description: "First flawless game",     emoji: "✨", category: "skill",
     check: id => (progress(id)?.perfectGames ?? 0) >= 1 },
-  { id: "flawless_five", label: "Cinco gabaritos",    description: "5 jogos sem erros",           emoji: "💫", category: "skill",
+  { id: "flawless_five", label: "Five perfects",    description: "5 flawless games",           emoji: "💫", category: "skill",
     check: id => (progress(id)?.perfectGames ?? 0) >= 5 },
-  { id: "perfection",    label: "Perfeição",          description: "15 jogos sem erros",          emoji: "🌠", category: "skill",
+  { id: "perfection",    label: "Perfection",          description: "15 flawless games",          emoji: "🌠", category: "skill",
     check: id => (progress(id)?.perfectGames ?? 0) >= 15 },
 
   // Streaks (4)
-  { id: "streak_3",      label: "Em chamas",          description: "3 acertos seguidos",          emoji: "🔥", category: "streak",
+  { id: "streak_3",      label: "On fire",          description: "3 correct in a row",          emoji: "🔥", category: "streak",
     check: id => (progress(id)?.longestStreak ?? 0) >= 3 },
-  { id: "streak_5",      label: "Explosão",           description: "5 acertos seguidos",          emoji: "💥", category: "streak",
+  { id: "streak_5",      label: "Explosion",           description: "5 correct in a row",          emoji: "💥", category: "streak",
     check: id => (progress(id)?.longestStreak ?? 0) >= 5 },
-  { id: "streak_8",      label: "Incêndio",           description: "8 acertos seguidos",          emoji: "🎇", category: "streak",
+  { id: "streak_8",      label: "Inferno",           description: "8 correct in a row",          emoji: "🎇", category: "streak",
     check: id => (progress(id)?.longestStreak ?? 0) >= 8 },
-  { id: "streak_10",     label: "Imparável",          description: "10 acertos seguidos",         emoji: "⚡", category: "streak",
+  { id: "streak_10",     label: "Unstoppable",          description: "10 correct in a row",         emoji: "⚡", category: "streak",
     check: id => (progress(id)?.longestStreak ?? 0) >= 10 },
 
   // Skill — accuracy & volume (4)
-  { id: "sharpshooter",  label: "Atirador",           description: "80% de acerto (5+ jogos)",    emoji: "🎯", category: "skill",
+  { id: "sharpshooter",  label: "Sharpshooter",           description: "80% accuracy (5+ games)",    emoji: "🎯", category: "skill",
     check: id => { const p = progress(id); if (!p || p.gamesPlayed < 5 || p.totalAnswered < 20) return false; return (p.totalCorrect / p.totalAnswered) >= 0.8 } },
-  { id: "sniper",        label: "Sniper",             description: "90% de acerto (10+ jogos)",   emoji: "🏹", category: "skill",
+  { id: "sniper",        label: "Sniper",             description: "90% accuracy (10+ games)",   emoji: "🏹", category: "skill",
     check: id => { const p = progress(id); if (!p || p.gamesPlayed < 10 || p.totalAnswered < 50) return false; return (p.totalCorrect / p.totalAnswered) >= 0.9 } },
-  { id: "hundred_club",  label: "Centena",            description: "100 acertos totais",          emoji: "💯", category: "skill",
+  { id: "hundred_club",  label: "Century",            description: "100 total correct answers",          emoji: "💯", category: "skill",
     check: id => (progress(id)?.totalCorrect ?? 0) >= 100 },
-  { id: "five_hundred",  label: "Quinhentões",        description: "500 acertos totais",          emoji: "🎓", category: "skill",
+  { id: "five_hundred",  label: "Five hundred",        description: "500 total correct answers",          emoji: "🎓", category: "skill",
     check: id => (progress(id)?.totalCorrect ?? 0) >= 500 },
 
   // Rank — podiums & wins (4)
-  { id: "first_podium",  label: "Primeiro pódio",     description: "Top 3 em um jogo",            emoji: "🥉", category: "rank",
+  { id: "first_podium",  label: "First podium",     description: "Top 3 in a game",            emoji: "🥉", category: "rank",
     check: id => podiumsFor(id) >= 1 },
-  { id: "winner",        label: "Vencedor",           description: "Primeiro 1º lugar",           emoji: "🥇", category: "rank",
+  { id: "winner",        label: "Winner",           description: "First 1st place",           emoji: "🥇", category: "rank",
     check: id => winsFor(id) >= 1 },
-  { id: "triple_crown",  label: "Tríplice coroa",     description: "3 vitórias",                  emoji: "👑", category: "rank",
+  { id: "triple_crown",  label: "Triple crown",     description: "3 wins",                  emoji: "👑", category: "rank",
     check: id => winsFor(id) >= 3 },
-  { id: "champion",      label: "Campeão",            description: "10 vitórias",                 emoji: "🏆", category: "rank",
+  { id: "champion",      label: "Champion",            description: "10 wins",                 emoji: "🏆", category: "rank",
     check: id => winsFor(id) >= 10 },
 
   // Tier (4)
-  { id: "silver_tier",   label: "Prata",              description: "Alcançou o tier Silver",      emoji: "🥈", category: "tier",
+  { id: "silver_tier",   label: "Silver",              description: "Reached Silver tier",      emoji: "🥈", category: "tier",
     check: id => hasLevel(id, 11) },
-  { id: "gold_tier",     label: "Ouro",               description: "Alcançou o tier Gold",        emoji: "🏆", category: "tier",
+  { id: "gold_tier",     label: "Gold",               description: "Reached Gold tier",        emoji: "🏆", category: "tier",
     check: id => hasLevel(id, 26) },
-  { id: "platinum_tier", label: "Platina",            description: "Alcançou o tier Platinum",    emoji: "💎", category: "tier",
+  { id: "platinum_tier", label: "Platinum",            description: "Reached Platinum tier",    emoji: "💎", category: "tier",
     check: id => hasLevel(id, 51) },
-  { id: "mythic_tier",   label: "Mítico",             description: "Alcançou o tier Mythic",      emoji: "👑", category: "tier",
+  { id: "mythic_tier",   label: "Mythic",             description: "Reached Mythic tier",      emoji: "👑", category: "tier",
     check: id => hasLevel(id, 100) },
 
   // Variety (2)
-  { id: "variety_5",     label: "Explorador",         description: "Jogou 5 quizzes diferentes",  emoji: "🗺️", category: "variety",
+  { id: "variety_5",     label: "Explorer",         description: "Played 5 different quizzes",  emoji: "🗺️", category: "variety",
     check: id => distinctQuizCount(id) >= 5 },
-  { id: "variety_10",    label: "Enciclopédia",       description: "Jogou 10 quizzes diferentes", emoji: "📖", category: "variety",
+  { id: "variety_10",    label: "Encyclopedia",       description: "Played 10 different quizzes", emoji: "📖", category: "variety",
     check: id => distinctQuizCount(id) >= 10 },
 
   // Participation — intensity (1)
-  { id: "marathoner",    label: "Maratonista",        description: "3 jogos no mesmo dia",        emoji: "🏃", category: "participation",
+  { id: "marathoner",    label: "Marathoner",        description: "3 games in the same day",        emoji: "🏃", category: "participation",
     check: id => maxGamesInSingleDay(id) >= 3 },
 
   // Rank — leaderboards (2)
-  { id: "top10_monthly", label: "Top 10 do mês",      description: "Top 10 de um mês",            emoji: "📊", category: "rank",
+  { id: "top10_monthly", label: "Top 10 of the month",      description: "Top 10 in any month",            emoji: "📊", category: "rank",
     check: id => { const r = bestRankInAnyPeriod(id, "month_iso"); return r > 0 && r <= 10 } },
-  { id: "monthly_crown", label: "Rei do mês",         description: "Nº 1 em um mês fechado",      emoji: "👑", category: "rank",
+  { id: "monthly_crown", label: "King of the month",         description: "Number 1 in a closed month",      emoji: "👑", category: "rank",
     check: id => { const r = bestRankInAnyPeriod(id, "month_iso"); return r === 1 } },
 ]
 

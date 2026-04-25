@@ -52,6 +52,7 @@ type ManagerExtraStatus = {
     responses: Record<number, number>
     correct: number
     answers: string[]
+    answerImages?: (string | null)[]
     image?: string
     video?: string
   }

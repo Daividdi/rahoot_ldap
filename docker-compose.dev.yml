@@ -1,0 +1,36 @@
+services:
+  rahoot2-dev:
+    image: node:22-alpine
+    container_name: rahoot2-dev
+    working_dir: /app
+    ports:
+      - "${WEB_PORT:-3003}:3000"
+      - "${SOCKET_PORT:-3002}:3001"
+    volumes:
+      - .:/app
+      - rahoot2_node_modules:/app/node_modules
+      - rahoot2_web_modules:/app/packages/web/node_modules
+      - rahoot2_socket_modules:/app/packages/socket/node_modules
+      - ../config:/app/config
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - WEB_ORIGIN=${WEB_ORIGIN:-http://localhost:3003}
+      - SOCKET_URL=${SOCKET_URL:-http://localhost:3002}
+      - NODE_ENV=development
+    env_file:
+      - path: .env
+        required: false
+    command: >
+      sh -c "
+        corepack enable &&
+        corepack prepare pnpm@latest --activate &&
+        pnpm install --no-frozen-lockfile &&
+        sh -c 'cd /app/packages/socket && pnpm dev &' &&
+        cd /app/packages/web && pnpm dev
+      "
+    restart: unless-stopped
+
+volumes:
+  rahoot2_node_modules:
+  rahoot2_web_modules:
+  rahoot2_socket_modules:

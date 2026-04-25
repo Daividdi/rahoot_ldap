@@ -53,6 +53,11 @@ export interface ProfilePayload {
   }>
   monthly: { rank: number | null; points: number; games: number } | null
   weekly: { rank: number | null; points: number; games: number } | null
+  modeStats: {
+    classic: { games: number; points: number; correct: number; answered: number }
+    solo:    { games: number; points: number; correct: number; answered: number }
+    team:    { games: number; points: number; correct: number; answered: number }
+  }
   badges: Array<{ id: string; label: string; description: string; emoji: string; category: string; unlockedAt: string }>
   catalog: typeof BADGE_CATALOG_PUBLIC
 }
@@ -97,6 +102,34 @@ function getPlayerRecord(id: string) {
     createdAt: row.createdAt,
     lastSeenAt: row.lastSeenAt,
   }
+}
+
+function getModeStats(playerId: string) {
+  const rows = db()
+    .prepare(
+      `SELECT s.mode AS mode,
+              COUNT(*)          AS games,
+              SUM(sp.points)    AS points,
+              SUM(sp.correct)   AS correct,
+              SUM(sp.correct + sp.incorrect) AS answered
+         FROM session_players sp
+         JOIN sessions s ON s.id = sp.session_id
+        WHERE sp.player_id = ?
+        GROUP BY s.mode`
+    )
+    .all(playerId) as Array<{ mode: string; games: number; points: number; correct: number; answered: number }>
+  const empty = { games: 0, points: 0, correct: 0, answered: 0 }
+  const out = { classic: { ...empty }, solo: { ...empty }, team: { ...empty } }
+  for (const r of rows) {
+    const bucket = (r.mode === "solo" || r.mode === "team") ? r.mode : "classic"
+    out[bucket] = {
+      games: r.games | 0,
+      points: r.points | 0,
+      correct: r.correct | 0,
+      answered: r.answered | 0,
+    }
+  }
+  return out
 }
 
 function getProgression(id: string) {
@@ -175,7 +208,8 @@ function getPeriodStanding(playerId: string, column: "week_iso" | "month_iso", v
 export function getProfile(realName: string): ProfilePayload {
   const id = findPlayerId(realName)
   if (!id) {
-    return { player: null, progression: null, recentSessions: [], monthly: null, weekly: null, badges: [], catalog: BADGE_CATALOG_PUBLIC }
+    const empty = { games: 0, points: 0, correct: 0, answered: 0 }
+    return { player: null, progression: null, recentSessions: [], monthly: null, weekly: null, modeStats: { classic: empty, solo: empty, team: empty }, badges: [], catalog: BADGE_CATALOG_PUBLIC }
   }
   const now = new Date()
   const weekIso = getISOWeek(now)
@@ -187,6 +221,7 @@ export function getProfile(realName: string): ProfilePayload {
     recentSessions: getRecentSessions(id, 10),
     monthly: getPeriodStanding(id, "month_iso", monthIso),
     weekly: getPeriodStanding(id, "week_iso", weekIso),
+    modeStats: getModeStats(id),
     badges: getPlayerBadges(id),
     catalog: BADGE_CATALOG_PUBLIC,
   }

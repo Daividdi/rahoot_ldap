@@ -16,6 +16,7 @@ type Props = {
 type CorrectAnswerData = {
   question: string
   answers: string[]
+  answerImages?: (string | null)[]
   correct: number
 }
 
@@ -202,10 +203,16 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
             <p className="mb-2 text-center text-xs font-semibold uppercase tracking-widest text-white/40">
               Correct answer
             </p>
-            <div className="rounded-xl border border-green-400/30 bg-green-500/15 px-6 py-4 text-center backdrop-blur-sm">
-              <p className="text-lg font-bold text-green-300">
-                {correctAnswer.answers[correctAnswer.correct]}
-              </p>
+            <div className="rounded-xl border border-green-400/30 bg-green-500/15 px-4 py-4 text-center backdrop-blur-sm flex flex-col items-center gap-2">
+              {correctAnswer.answerImages?.[correctAnswer.correct] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={correctAnswer.answerImages[correctAnswer.correct]!} alt="" className="max-h-28 w-auto rounded-lg object-contain border border-white/20" />
+              )}
+              {correctAnswer.answers[correctAnswer.correct] && (
+                <p className="text-lg font-bold text-green-300">
+                  {correctAnswer.answers[correctAnswer.correct]}
+                </p>
+              )}
             </div>
           </motion.div>
         )}

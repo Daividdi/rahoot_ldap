@@ -1,5 +1,7 @@
 "use client"
 
+import AppHeader from "@rahoot/web/components/AppHeader"
+import { setTheme, getTheme, THEMES } from "@rahoot/web/components/ThemeProvider"
 import Button from "@rahoot/web/components/Button"
 import TierBadge from "@rahoot/web/components/profile/TierBadge"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
@@ -191,6 +193,8 @@ export default function AvatarPickerPage() {
   const [query, setQuery] = useState("")
   const [savedFlash, setSavedFlash] = useState(false)
   const [bg, setBg] = useState<BgPreset>(BACKGROUNDS[0])
+  const [currentTheme, setCurrentTheme] = useState<string>("default")
+  useEffect(() => { setCurrentTheme(getTheme()) }, [])
 
   useEffect(() => {
     setRealName(getStoredName())
@@ -216,7 +220,9 @@ export default function AvatarPickerPage() {
     const onSaved = (resp: { ok: boolean; reason?: string }) => {
       if (resp.ok) {
         setSavedFlash(true)
-        setTimeout(() => setSavedFlash(false), 1800)
+        // Refresh profile so home screen shows the new avatar immediately
+        if (realName) (socket as any).emit("player:getProfile", { realName })
+        setTimeout(() => { router.push("/") }, 500)
       }
     }
     ;(socket as any).on("avatar3d:catalog", onCat)
@@ -264,6 +270,10 @@ export default function AvatarPickerPage() {
       kind: "3d",
       avatar3dId: selected.id,
     })
+    // Local profile patch so home card reflects the change even before server ack
+    setProfile(prev => prev && prev.player
+      ? { ...prev, player: { ...prev.player, avatarKind: "3d", avatar3dId: selected.id } as any }
+      : prev)
   }, [selected, realName, socket])
 
   if (!realName) {
@@ -284,12 +294,7 @@ export default function AvatarPickerPage() {
         {/* Header */}
         <header className="flex flex-col gap-3">
           <div className="flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/atreat-logo.png"
-              alt="Angel TREAT"
-              style={{ height: 22, width: "auto", opacity: 0.55 }}
-            />
+            <AppHeader size="sm" />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -353,7 +358,7 @@ export default function AvatarPickerPage() {
               {catalog && catalog.ok === false && (
                 <div className="py-10 text-center text-sm text-red-200">Catalog unavailable.</div>
               )}
-              <div className="grid max-h-[60vh] grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                 {filtered.map(a => {
                   const isSel = selectedId === a.id
                   const isFav = favoriteId === a.id
@@ -472,6 +477,31 @@ export default function AvatarPickerPage() {
                     </div>
                   </div>
 
+                  {/* App-wide theme */}
+                  <div>
+                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Rahoot theme</div>
+                    <div className="flex flex-wrap gap-2">
+                      {THEMES.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => { setTheme(t.id); setCurrentTheme(t.id) }}
+                          className={clsx(
+                            "flex items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold ring-1 transition",
+                            currentTheme === t.id ? "ring-amber-300/70 bg-white/10 text-white" : "ring-white/20 bg-white/5 text-white/80 hover:bg-white/15"
+                          )}
+                        >
+                          <span
+                            aria-hidden
+                            className="inline-block h-4 w-4 rounded-full ring-1 ring-black/30"
+                            style={{ background: t.swatch }}
+                          />
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[10px] text-white/50">Applies to the whole app (login, game, ranking).</p>
+                  </div>
+
                   {/* Animations */}
                   <div>
                     <div className="mb-2 text-xs font-bold uppercase tracking-wider text-white/60">Animations</div>
@@ -507,7 +537,7 @@ export default function AvatarPickerPage() {
                           : "bg-white text-indigo-900 hover:brightness-110"
                       )}
                     >
-                      {isFavorite ? "★ Favorited (saved)" : "★ Favorite this avatar"}
+                      {isFavorite ? "★ Active avatar" : "★ Set as my avatar"}
                     </button>
                   </div>
                 </div>
@@ -597,7 +627,7 @@ function ClassicPane({
           </div>
           <button
             onClick={handleShuffle}
-            className="rounded-full bg-white/90 px-4 py-1.5 text-xs font-bold text-indigo-900 shadow hover:brightness-110 active:scale-95 transition"
+            className="rounded-full bg-white/90 px-4 py-1.5 text-xs font-bold text-indigo-900 shadow hover:brightness-110 active:scale-[0.96] transition"
           >
             🎲 Shuffle
           </button>
@@ -610,15 +640,15 @@ function ClassicPane({
         <div className="mt-4 flex items-center gap-2">
           <button
             onClick={handleSave}
-            className="flex-1 rounded-xl bg-white px-4 py-2 text-sm font-bold text-indigo-900 shadow hover:brightness-110 transition"
+            className={clsx(
+              "flex-1 rounded-xl px-4 py-2 text-sm font-bold shadow transition",
+              currentKind === "dicebear"
+                ? "bg-amber-300 text-indigo-900 ring-2 ring-amber-200"
+                : "bg-white text-indigo-900 hover:brightness-110"
+            )}
           >
-            Save classic avatar
+            {currentKind === "dicebear" ? "★ Active avatar" : "★ Set as my avatar"}
           </button>
-          {currentKind === "dicebear" && (
-            <span className="rounded-full bg-emerald-400/25 px-3 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/50">
-              In use
-            </span>
-          )}
         </div>
       </div>
 

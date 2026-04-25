@@ -4,6 +4,7 @@ import logo from "@rahoot/web/assets/logo.svg"
 import Loader from "@rahoot/web/components/Loader"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import { PropsWithChildren, useEffect } from "react"
 
 const BackgroundElements = () => (
@@ -43,12 +44,42 @@ const BackgroundElements = () => (
 
 const AuthLayout = ({ children }: PropsWithChildren) => {
   const { isConnected, connect } = useSocket()
+  const pathname = usePathname()
+  const isManager = pathname === "/manager"
 
   useEffect(() => {
     if (!isConnected) {
       connect()
     }
   }, [connect, isConnected])
+
+  if (isManager) {
+    if (!isConnected) {
+      return (
+        <section className="bg-gradient-angel min-h-dvh flex flex-col items-center justify-center">
+          <div className="anim-fade-in-up flex flex-col items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/angeltreat-logo.png"
+              alt="Angel TREAT"
+              style={{ height: 28, width: 'auto', marginBottom: 8, filter: 'brightness(0) invert(1)' }}
+            />
+            <Image
+              src={logo}
+              className="drop-shadow-[0_5px_5px_rgba(0,0,0,0.3)]"
+              alt="Rahoot!"
+              style={{ height: 80, width: 'auto', marginBottom: 24 }}
+            />
+            <Loader className="h-16 anim-pulse-soft" />
+            <h2 className="mt-3 text-center text-xl font-bold text-white/80 md:text-2xl">
+              Connecting...
+            </h2>
+          </div>
+        </section>
+      )
+    }
+    return <>{children}</>
+  }
 
   return (
     <section className="bg-gradient-angel relative min-h-dvh flex flex-col">
@@ -59,9 +90,9 @@ const AuthLayout = ({ children }: PropsWithChildren) => {
           <div className="anim-fade-in-up flex flex-col items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/atreat-logo.png"
+              src="/angeltreat-logo.png"
               alt="Angel TREAT"
-              style={{ height: 24, width: 'auto', opacity: 0.5, marginBottom: 8 }}
+              style={{ height: 28, width: 'auto', marginBottom: 8, filter: 'brightness(0) invert(1)' }}
             />
             <Image
               src={logo}
@@ -80,9 +111,9 @@ const AuthLayout = ({ children }: PropsWithChildren) => {
           <div className="mb-3 flex flex-col items-center shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/atreat-logo.png"
+              src="/angeltreat-logo.png"
               alt="Angel TREAT"
-              style={{ height: 20, width: 'auto', opacity: 0.45, marginBottom: 6 }}
+              style={{ height: 24, width: 'auto', marginBottom: 6, filter: 'brightness(0) invert(1)' }}
             />
             <Image
               src={logo}

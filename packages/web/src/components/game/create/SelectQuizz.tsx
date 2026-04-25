@@ -16,10 +16,10 @@ type Props = {
 }
 
 const SHAPE_STYLES = [
-  { bg: "bg-answer-red", shape: "triangle" as const },
-  { bg: "bg-answer-blue", shape: "diamond" as const },
-  { bg: "bg-answer-yellow", shape: "circle" as const },
-  { bg: "bg-answer-green", shape: "square" as const },
+  { color: "var(--color-answer-red)", shape: "triangle" as const },
+  { color: "var(--color-answer-blue)", shape: "diamond" as const },
+  { color: "var(--color-answer-yellow)", shape: "circle" as const },
+  { color: "var(--color-answer-green)", shape: "square" as const },
 ]
 
 const REGIONS = ["Brazil (BR)", "Malaysia (MY)", "Global (All teams)"]
@@ -33,7 +33,7 @@ const ANSWER_LABELS = ["A", "B", "C", "D"]
 const ShapeIcon = ({ index }: { index: number }) => {
   const s = SHAPE_STYLES[index % SHAPE_STYLES.length]
   return (
-    <div className={clsx("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shape-icon", s.bg)}>
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg shape-icon" style={{ background: s.color }}>
       {s.shape === "triangle" && <div className="h-0 w-0" style={{ borderLeft: "8px solid transparent", borderRight: "8px solid transparent", borderBottom: "14px solid white" }} />}
       {s.shape === "diamond" && <div className="h-3.5 w-3.5 rotate-45 bg-white" />}
       {s.shape === "circle" && <div className="h-4 w-4 rounded-full bg-white" />}
@@ -194,6 +194,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
   const [savePulse, setSavePulse] = useState(false)
   const countdownRef = useRef(60)
   const latestDraft = useRef<any>({})
+  const questionsEndRef = useRef<HTMLDivElement>(null)
 
   // Import quiz modal
   const [importPreview, setImportPreview] = useState<{ subject: string; questions: any[] } | null>(null)
@@ -371,11 +372,16 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
     if (!subject.trim()) return toast.error("The quiz needs a title!")
     if (!createdBy.trim()) return toast.error("Please provide the author's name!")
     if (questions.some((q) => !q.question.trim())) return toast.error("All questions must have text!")
-    const createdAt = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())
-    const filteredQs = questions.map((q) => ({ ...q, answers: q.answers.filter((a: string) => a.trim() !== "") }))
+    const existing = localList.find((q: any) => q.id === editId)
+    const createdAt = editId && existing?.createdAt ? existing.createdAt : new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date())
+    const filteredQs = questions.map((q) => {
+      const imgs = q.answerImages || [null, null, null, null]
+      const pairs = q.answers.map((a: string, i: number) => ({ text: a, img: imgs[i] ?? null }))
+      const kept = pairs.filter((p: { text: string; img: string | null }) => p.text.trim() !== "" || p.img)
+      return { ...q, answers: kept.map((p: { text: string; img: string | null }) => p.text), answerImages: kept.map((p: { text: string; img: string | null }) => p.img) }
+    })
     const finalId = editId || (subject.toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now() + ".json")
-    const existing = localList.find((q) => q.id === editId)
-    const newQuiz: any = { id: finalId, subject, createdBy, createdAt, lastPlayedAt: existing?.lastPlayedAt || null, region, category, group, questions: filteredQs }
+    const newQuiz: any = { ...(existing || {}), id: finalId, subject, createdBy, createdAt, lastPlayedAt: existing?.lastPlayedAt || null, region, category, group, questions: filteredQs }
     anySocket?.emit("manager:createQuiz", newQuiz)
     setLocalList((prev) => { const clean = prev.filter((q) => q.id !== finalId && q.id !== editId); const next = [...clean, newQuiz]; onListChange?.(next); return next })
     setSelected(finalId)
@@ -385,7 +391,10 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
   }
 
   // ─ question helpers ─
-  const addQuestion = () => setQuestions([...questions, blankQuestion()])
+  const addQuestion = () => {
+    setQuestions(prev => [...prev, blankQuestion()])
+    setTimeout(() => questionsEndRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+  }
   const updateQuestion = (i: number, f: string, v: any) => { const q = [...questions]; q[i] = { ...q[i], [f]: v }; setQuestions(q) }
   const updateAnswer = (qi: number, ai: number, v: string) => { const q = [...questions]; q[qi].answers[ai] = v; setQuestions(q) }
   const updateAnswerImage = (qi: number, ai: number, v: string | null) => {
@@ -454,9 +463,9 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
     const pct = countdown / 60
     const r = 6, circ = 2 * Math.PI * r
     return (
-      <div className="flex flex-col gap-3">
-        {/* Editor toolbar */}
-        <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex flex-col h-full">
+        {/* Editor toolbar — stays fixed at top */}
+        <div className="shrink-0 rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden mb-3">
 
           {/* Row 1: title + primary actions */}
           <div className="flex items-center gap-3 px-4 py-3">
@@ -541,36 +550,37 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
           </div>
         </div>
 
+        {/* Scrollable quiz content */}
+        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-3 pb-4">
+
         {/* Quiz metadata */}
-        <div className="rounded-xl bg-white p-4">
-          <div className="mb-3 flex gap-3">
-            <div className="flex-[2]">
-              <label className="mb-1 block text-xs font-semibold text-gray-400">Quiz title</label>
-              <input className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:border-primary focus:bg-white outline-none" placeholder="e.g. Tooth Anatomy Review" value={subject} onChange={(e) => setSubject(e.target.value)} />
+        <div className="rounded-xl bg-white border border-gray-100 shadow-sm p-3">
+          <div className="flex gap-2 flex-wrap">
+            <div className="flex-[3] min-w-[160px]">
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-gray-400">Quiz title</label>
+              <input className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:border-primary focus:bg-white outline-none" placeholder="e.g. Tooth Anatomy Review" value={subject} onChange={(e) => setSubject(e.target.value)} />
             </div>
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold text-gray-400">Author</label>
-              <input className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:border-primary focus:bg-white outline-none" placeholder="Your name" value={createdBy} onChange={(e) => setCreatedBy(e.target.value)} />
+            <div className="flex-[2] min-w-[120px]">
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-gray-400">Author</label>
+              <input className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 placeholder:text-gray-400 focus:border-primary focus:bg-white outline-none" placeholder="Your name" value={createdBy} onChange={(e) => setCreatedBy(e.target.value)} />
             </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold text-gray-400">Region / Team</label>
-              <select className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={region} onChange={(e) => setRegion(e.target.value)}>{REGIONS.map((r) => <option key={r}>{r}</option>)}</select>
+            <div className="flex-[2] min-w-[110px]">
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-gray-400">Region</label>
+              <select className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={region} onChange={(e) => setRegion(e.target.value)}>{REGIONS.map((r) => <option key={r}>{r}</option>)}</select>
             </div>
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold text-gray-400">Category</label>
-              <select className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+            <div className="flex-[2] min-w-[110px]">
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-gray-400">Category</label>
+              <select className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
             </div>
-            <div className="flex-1">
-              <label className="mb-1 block text-xs font-semibold text-gray-400">Group</label>
-              <select className="w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={group} onChange={(e) => setGroup(e.target.value)}>{GROUPS.map((g) => <option key={g}>{g}</option>)}</select>
+            <div className="flex-1 min-w-[80px]">
+              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-gray-400">Group</label>
+              <select className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-primary cursor-pointer" value={group} onChange={(e) => setGroup(e.target.value)}>{GROUPS.map((g) => <option key={g}>{g}</option>)}</select>
             </div>
           </div>
         </div>
 
         {/* Questions */}
-        <div className="max-h-[52vh] overflow-y-auto flex flex-col gap-3 pr-1">
+        <div className="flex flex-col gap-3">
           {questions.map((q: any, qi: number) => (
             <div key={qi} className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
               {/* Question header */}
@@ -588,17 +598,30 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               />
 
               {/* Question image */}
-              <div className="mb-3 flex gap-2 items-center">
-                <span className="text-[11px] font-semibold text-gray-400 shrink-0">Question image:</span>
+              <div className="mb-3">
                 {q.image ? (
-                  <div className="flex items-center gap-2 flex-1">
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={q.image} alt="" className="h-12 w-20 object-cover rounded-lg border border-gray-200" />
-                    <button onClick={() => updateQuestion(qi, "image", "")} className="text-[10px] text-red-400 hover:text-red-600 font-semibold">Remove</button>
+                    <img src={q.image} alt="" className="w-full object-contain max-h-56 rounded-xl" style={{ background: "#f8f9fa" }} />
+                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <label className="cursor-pointer flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-primary transition-colors">
+                        ✎ Change
+                        <input type="file" className="hidden" accept="image/*" onChange={handleQuestionImageUpload(qi)} />
+                      </label>
+                      <button onClick={() => updateQuestion(qi, "image", "")} className="rounded-lg bg-red-500/80 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-red-600 transition-colors">✕ Remove</button>
+                    </div>
                   </div>
                 ) : (
-                  <label className="cursor-pointer rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-[11px] font-semibold text-gray-400 hover:border-primary hover:text-primary transition-colors">
-                    + Upload
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-6 text-gray-400 hover:border-primary hover:bg-primary/5 hover:text-primary transition-colors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8 opacity-50">
+                      <rect x="3" y="3" width="18" height="18" rx="3"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    <div className="text-center">
+                      <div className="text-xs font-bold">Add question image</div>
+                      <div className="text-[10px] opacity-60 mt-0.5">Click to upload · PNG, JPG, GIF</div>
+                    </div>
                     <input type="file" className="hidden" accept="image/*" onChange={handleQuestionImageUpload(qi)} />
                   </label>
                 )}
@@ -607,32 +630,48 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               {/* Answer options */}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 {q.answers.map((a: string, ai: number) => (
-                  <div key={ai} className={clsx("rounded-xl border-2 p-2.5 transition-all", ANSWER_COLORS[ai], q.solution === ai ? "ring-2 ring-green-400 ring-offset-1" : "")}>
-                    {/* Answer image preview */}
-                    {q.answerImages?.[ai] && (
-                      <div className="mb-1.5 relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={q.answerImages[ai]!} alt="" className="w-full h-20 object-cover rounded-lg" />
-                        <button
-                          onClick={() => updateAnswerImage(qi, ai, null)}
-                          className="absolute top-0.5 right-0.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-black/70"
-                        >✕</button>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <input type="radio" name={`sol-${qi}`} checked={q.solution === ai} onChange={() => updateQuestion(qi, "solution", ai)} className="h-3.5 w-3.5 cursor-pointer accent-green-400 shrink-0" />
-                      <input
-                        className="w-full bg-transparent text-sm font-medium text-white placeholder:text-white/50 focus:outline-none min-w-0"
-                        placeholder={`Answer ${ANSWER_LABELS[ai]}`}
-                        value={a}
-                        onChange={(e) => updateAnswer(qi, ai, e.target.value)}
-                      />
-                      {q.solution === ai && <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-400 text-[10px] font-bold text-white">✓</span>}
-                      {/* Per-answer image upload */}
-                      <label className="cursor-pointer shrink-0 rounded-lg bg-white/20 px-1.5 py-0.5 text-[10px] font-bold text-white/80 hover:bg-white/30 transition-colors" title="Add image to this answer">
-                        🖼
-                        <input type="file" className="hidden" accept="image/*" onChange={handleAnswerImageUpload(qi, ai)} />
-                      </label>
+                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex h-20 transition-all", ANSWER_COLORS[ai], q.solution === ai ? "ring-2 ring-green-400 ring-offset-1" : "")}>
+                    {/* Square image zone */}
+                    <div className="relative w-20 h-20 shrink-0 bg-black/10 overflow-hidden group/img">
+                      {q.answerImages?.[ai] ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={q.answerImages[ai]!} alt="" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 opacity-0 group-hover/img:opacity-100 bg-black/40 transition-opacity">
+                            <label className="cursor-pointer rounded bg-white/25 px-2 py-0.5 text-[9px] font-bold text-white hover:bg-white/40">
+                              Change
+                              <input type="file" className="hidden" accept="image/*" onChange={handleAnswerImageUpload(qi, ai)} />
+                            </label>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); updateAnswerImage(qi, ai, null) }} className="rounded bg-red-500/80 px-2 py-0.5 text-[9px] font-bold text-white hover:bg-red-600">Remove</button>
+                          </div>
+                        </>
+                      ) : (
+                        <label className="flex h-full w-full cursor-pointer items-center justify-center hover:bg-black/10 transition-colors">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6 text-white/40 group-hover/img:text-white/60">
+                            <rect x="3" y="3" width="18" height="18" rx="3"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                          </svg>
+                          <input type="file" className="hidden" accept="image/*" onChange={handleAnswerImageUpload(qi, ai)} />
+                        </label>
+                      )}
+                    </div>
+                    {/* Text area */}
+                    <div className="flex flex-1 items-center gap-2 px-3">
+                      <input type="radio" name={`sol-${qi}`} checked={q.solution === ai} onChange={() => updateQuestion(qi, "solution", ai)} className="h-4 w-4 cursor-pointer accent-green-400 shrink-0" />
+                      {q.answerImages?.[ai] ? (
+                        <span className="flex-1 text-sm font-semibold text-white/50 italic min-w-0 truncate">
+                          {a || "Image answer"}
+                        </span>
+                      ) : (
+                        <input
+                          className="flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none min-w-0"
+                          placeholder={`Answer ${ANSWER_LABELS[ai]}`}
+                          value={a}
+                          onChange={(e) => updateAnswer(qi, ai, e.target.value)}
+                        />
+                      )}
+                      {q.solution === ai && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-400 text-[11px] font-bold text-white">✓</span>}
                     </div>
                   </div>
                 ))}
@@ -655,6 +694,9 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
           className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-3 text-sm font-semibold text-gray-400 hover:border-primary hover:text-primary transition-colors"
           onClick={addQuestion}
         >+ Add New Question</button>
+        <div ref={questionsEndRef} />
+
+        </div>{/* end scroll wrapper */}
       </div>
     )
   }
@@ -663,7 +705,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
   // LIST VIEW
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div>
+    <div className="flex flex-col h-full">
       {/* Import quiz modal */}
       {importPreview && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -684,6 +726,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
         </div>
       )}
 
+      <div className="flex-1 overflow-auto min-h-0 px-5 pt-4 pb-2">
       {/* Controls */}
       <div className="mb-3 flex items-center gap-2 flex-wrap">
         <input type="text" className="flex-1 min-w-[140px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 placeholder:text-gray-400 outline-none focus:border-primary" placeholder="Search quizzes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -710,7 +753,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
       </div>
 
       {/* List */}
-      <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="flex flex-col gap-2">
         {filteredList.map((quizz, index) => {
           const acc = getQuizAccuracy(quizz)
           const playerCount = quizz.lastSessionStats?.length || 0
@@ -747,42 +790,44 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
         })}
       </div>
 
-      {/* Mode picker */}
-      <div className="mt-4">
+      </div>{/* end scrollable */}
+      {/* Mode picker — always visible, outside scroll area */}
+      <div className="shrink-0 px-5 pb-4 pt-3 bg-[#f8fafc] border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
         {!selected ? (
-          <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white/50 px-4 py-4 text-center text-xs font-medium text-gray-400">
-            Select a quiz above to choose how to run it
+          <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white/50 px-4 py-6 text-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" className="h-8 w-8 mx-auto mb-2"><path d="M5 3l14 9-14 9V3z"/></svg>
+            <p className="text-sm font-medium text-gray-400">Select a quiz above to choose how to play</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-3">
             {/* Classic */}
-            <div className="flex flex-col rounded-xl border-2 border-accent bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">&#127942;</span>
+            <div className="flex flex-col rounded-xl border-2 border-accent bg-white overflow-hidden shadow-sm">
+              <div className="bg-accent/8 px-4 py-3 border-b border-accent/15 flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-base">🏆</div>
                 <span className="text-sm font-bold text-gray-800">Classic</span>
               </div>
-              <p className="mt-1 text-[11px] text-gray-500 leading-snug">
-                Live multiplayer with a PIN. Players join in real-time; podium at the end.
-              </p>
-              <Button onClick={handleSubmit} className="mt-3 py-2 text-sm">Start live session</Button>
+              <div className="p-4 flex flex-col flex-1">
+                <p className="text-[11px] text-gray-500 leading-snug flex-1">Live multiplayer with a PIN. Players join in real-time; podium at the end.</p>
+                <Button onClick={handleSubmit} className="mt-3 py-2 text-sm">Start live session</Button>
+              </div>
             </div>
 
             {/* Solo */}
             <SoloCard selected={selected} selectedQuiz={localList.find((q: any) => q.id === selected) || null} />
 
             {/* Team vs Team */}
-            <div className="flex flex-col rounded-xl border-2 border-gray-200 bg-white/60 p-4 opacity-60">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">&#9876;</span>
-                  <span className="text-sm font-bold text-gray-800">Team vs Team</span>
+            <div className="flex flex-col rounded-xl border-2 border-gray-200 bg-white overflow-hidden opacity-55">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-base">⚔️</div>
+                  <span className="text-sm font-bold text-gray-700">Team vs Team</span>
                 </div>
                 <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">Soon</span>
               </div>
-              <p className="mt-1 text-[11px] text-gray-500 leading-snug">
-                Head-to-head teams with shared scores. In development.
-              </p>
-              <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Coming soon</button>
+              <div className="p-4 flex flex-col flex-1">
+                <p className="text-[11px] text-gray-500 leading-snug flex-1">Head-to-head teams with shared scores. In development.</p>
+                <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Coming soon</button>
+              </div>
             </div>
           </div>
         )}
@@ -798,7 +843,18 @@ function SoloCard({ selected, selectedQuiz }: { selected: string; selectedQuiz: 
   const handleCopy = async () => {
     if (!soloEnabled) return
     try {
-      await navigator.clipboard.writeText(url)
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const ta = document.createElement("textarea")
+        ta.value = url
+        ta.style.cssText = "position:fixed;opacity:0;top:0;left:0"
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        document.execCommand("copy")
+        document.body.removeChild(ta)
+      }
       setCopied(true)
       toast.success("Link copied — paste into Moodle")
       setTimeout(() => setCopied(false), 1800)
@@ -807,30 +863,30 @@ function SoloCard({ selected, selectedQuiz }: { selected: string; selectedQuiz: 
     }
   }
   return (
-    <div className={"flex flex-col rounded-xl border-2 bg-white p-4 shadow-sm " + (soloEnabled ? "border-primary/40" : "border-gray-200 opacity-60")}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">&#128100;</span>
+    <div className={"flex flex-col rounded-xl border-2 bg-white overflow-hidden shadow-sm " + (soloEnabled ? "border-primary/40" : "border-gray-200 opacity-55")}>
+      <div className={"px-4 py-3 border-b flex items-center justify-between gap-2 " + (soloEnabled ? "bg-primary/8 border-primary/15" : "bg-gray-50 border-gray-200")}>
+        <div className="flex items-center gap-2.5">
+          <div className={"flex h-8 w-8 items-center justify-center rounded-lg text-base " + (soloEnabled ? "bg-primary/15" : "bg-gray-100")}><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
           <span className="text-sm font-bold text-gray-800">Solo</span>
         </div>
         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">Moodle</span>
       </div>
-      <p className="mt-1 text-[11px] text-gray-500 leading-snug">
-        Individual play. Students answer on their own; final score + answer review (no podium).
-      </p>
-      {soloEnabled ? (
-        <>
-          <div className="mt-2 truncate rounded-md bg-gray-50 px-2 py-1 text-[10px] font-mono text-gray-500" title={url}>{url}</div>
-          <button
-            onClick={handleCopy}
-            className={"mt-2 rounded-lg py-2 text-sm font-semibold transition " + (copied ? "bg-emerald-500 text-white" : "bg-primary text-white hover:brightness-110")}
-          >
-            {copied ? "\u2713 Copied" : "Copy Moodle link"}
-          </button>
-        </>
-      ) : (
-        <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Solo disabled for this quiz</button>
-      )}
+      <div className="p-4 flex flex-col flex-1">
+        <p className="text-[11px] text-gray-500 leading-snug flex-1">Individual play. Students answer on their own; final score + answer review (no podium).</p>
+        {soloEnabled ? (
+          <>
+            <div className="mt-2 truncate rounded-md bg-gray-50 px-2 py-1 text-[10px] font-mono text-gray-500" title={url}>{url}</div>
+            <button
+              onClick={handleCopy}
+              className={"mt-2 rounded-lg py-2 text-sm font-semibold transition " + (copied ? "bg-emerald-500 text-white" : "bg-primary text-white hover:brightness-110")}
+            >
+              {copied ? "\u2713 Copied" : "Copy Moodle link"}
+            </button>
+          </>
+        ) : (
+          <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Solo disabled for this quiz</button>
+        )}
+      </div>
     </div>
   )
 }

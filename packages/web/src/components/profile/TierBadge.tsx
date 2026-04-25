@@ -27,7 +27,7 @@ export default function TierBadge({ tier, level, size = "md" }: Props) {
         "inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r font-bold text-white ring-2 ring-white/60",
         meta.gradient, meta.glow, dims
       )}
-      title={`${meta.label} — Nível ${level}`}
+      title={`${meta.label} — Level ${level}`}
     >
       <span aria-hidden>{meta.emoji}</span>
       <span>{meta.label}</span>

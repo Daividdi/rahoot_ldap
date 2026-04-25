@@ -19,6 +19,8 @@ export interface LeaderRow {
   avatarKind: "dicebear" | "3d"
   avatar3dId: string | null
   points: number
+  weightedPoints: number
+  multiplier: number
   games: number
   tier: string
   level: number
@@ -51,12 +53,21 @@ function periodLeaderboard(
   limit = 10,
   orderBy: PeriodOrder = "points"
 ): LeaderRow[] {
-  // Weekly ranking prioritises participation (games) over raw score, because
-  // teachers reward the most ACTIVE players of the week — not just the ones
-  // with the highest skill ceiling. Monthly keeps points-first for now.
+  // Participation multiplier: players who show up consistently get more
+  // credit per game than one-off high scorers. Keeps leaderboards from
+  // being dominated by a single lucky run.
+  const multiplierCase = `CASE
+    WHEN COUNT(*) >= 20 THEN 1.30
+    WHEN COUNT(*) >= 10 THEN 1.20
+    WHEN COUNT(*) >= 5  THEN 1.10
+    WHEN COUNT(*) >= 3  THEN 1.05
+    ELSE 1.00
+  END`
+  // Both weekly and monthly prioritise raw participation (games) — players
+  // who show up consistently outrank one-off high scorers.
   const orderClause = orderBy === "games"
-    ? "ORDER BY games DESC, points DESC"
-    : "ORDER BY points DESC, games DESC"
+    ? "ORDER BY games DESC, weightedPoints DESC"
+    : "ORDER BY weightedPoints DESC, games DESC"
   return db()
     .prepare(
       `SELECT sp.player_id  AS playerId,
@@ -68,12 +79,17 @@ function periodLeaderboard(
               pp.tier       AS tier,
               pp.level      AS level,
               SUM(sp.points) AS points,
+              ROUND(SUM(sp.points) * ${multiplierCase}) AS weightedPoints,
+              ${multiplierCase} AS multiplier,
               COUNT(*)       AS games
          FROM session_players sp
          JOIN sessions s ON s.id = sp.session_id
          JOIN players  p ON p.id = sp.player_id
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
+          AND LOWER(p.real_name) NOT LIKE '%daividdi%'
+          AND LOWER(p.real_name) NOT LIKE '%test user%'
+          AND p.real_name NOT GLOB '[0-9][0-9][0-9][0-9]*'
         GROUP BY sp.player_id
         ${orderClause}
         LIMIT ?`
@@ -88,6 +104,8 @@ function periodLeaderboard(
       avatarKind: r.avatarKind === "3d" ? "3d" : "dicebear",
       avatar3dId: r.avatar3dId ?? null,
       points: r.points,
+      weightedPoints: r.weightedPoints ?? r.points,
+      multiplier: r.multiplier ?? 1,
       games: r.games,
       tier: r.tier ?? "bronze",
       level: r.level ?? 1,
@@ -99,7 +117,7 @@ export function getCurrentWeekLeaderboard(limit = 10): LeaderRow[] {
 }
 
 export function getCurrentMonthLeaderboard(limit = 10): LeaderRow[] {
-  return periodLeaderboard("month_iso", currentMonthIso(), limit)
+  return periodLeaderboard("month_iso", currentMonthIso(), limit, "games")
 }
 
 // ─── Closed-period snapshotting ─────────────────────────────────────────────
@@ -183,6 +201,9 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
        FROM weekly_snapshots ws
        JOIN players p ON p.id = ws.player_id
       WHERE ws.week_iso = ? AND ws.rank <= 3
+        AND LOWER(p.real_name) NOT LIKE '%daividdi%'
+        AND LOWER(p.real_name) NOT LIKE '%test user%'
+        AND p.real_name NOT GLOB '[0-9][0-9][0-9][0-9]*'
       ORDER BY ws.rank ASC`
   )
   for (const { w } of weeks) {
@@ -191,7 +212,7 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
     }>
     out.push({
       period: w,
-      displayLabel: w.replace(/^(\d{4})-W(\d+)$/, "Semana $2 / $1"),
+      displayLabel: w.replace(/^(\d{4})-W(\d+)$/, "Week $2 / $1"),
       top: rows,
     })
   }
@@ -210,7 +231,7 @@ export function getMonthlyHallOfFame(limitPeriods = 12): HallOfFameEntry[] {
 
   const out: HallOfFameEntry[] = []
   for (const { m } of months) {
-    const top = periodLeaderboard("month_iso", m, 3)
+    const top = periodLeaderboard("month_iso", m, 3, "games")
     out.push({
       period: m,
       displayLabel: formatMonth(m),
@@ -238,12 +259,12 @@ export interface LeaderboardsBundle {
 }
 
 export function getAllLeaderboards(): LeaderboardsBundle {
-  const wk = lastWeekIso()
+  const wk = currentWeekIso()
   const mo = currentMonthIso()
   return {
     week: {
       iso: wk,
-      label: wk.replace(/^(\d{4})-W(\d+)$/, "Semana $2 / $1 (encerrada)"),
+      label: wk.replace(/^(\d{4})-W(\d+)$/, "Week $2 / $1"),
       top: periodLeaderboard("week_iso", wk, 10, "games"),
     },
     month: {

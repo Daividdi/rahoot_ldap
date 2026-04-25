@@ -29,9 +29,9 @@ export default function XpBar({ level, tier, xp, xpIntoLevel, xpNeededForNext, p
   return (
     <div className={clsx("w-full", compact ? "gap-1" : "gap-2", "flex flex-col")}>
       <div className={clsx("flex items-center justify-between", compact ? "text-[10px]" : "text-xs")}>
-        <span className="font-bold text-gray-600">Nível {level}</span>
+        <span className="font-bold text-gray-600">Level {level}</span>
         <span className="tabular-nums text-gray-400">
-          {xpIntoLevel.toLocaleString("pt-BR")} / {(xpIntoLevel + xpNeededForNext).toLocaleString("pt-BR")} XP
+          {xpIntoLevel.toLocaleString("en-US")} / {(xpIntoLevel + xpNeededForNext).toLocaleString("en-US")} XP
         </span>
       </div>
       <div className={clsx(
@@ -49,7 +49,7 @@ export default function XpBar({ level, tier, xp, xpIntoLevel, xpNeededForNext, p
       </div>
       {!compact && (
         <p className="text-[10px] text-gray-400">
-          Faltam <span className="font-bold text-gray-600 tabular-nums">{xpNeededForNext.toLocaleString("pt-BR")}</span> XP para o nível {level + 1}
+          <span className="font-bold text-gray-600 tabular-nums">{xpNeededForNext.toLocaleString("en-US")}</span> XP to level {level + 1}
         </p>
       )}
     </div>

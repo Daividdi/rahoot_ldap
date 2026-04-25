@@ -19,6 +19,8 @@ interface LeaderRow {
   avatar3dId: string | null
   avatar3dIcon?: string | null
   points: number
+  weightedPoints?: number
+  multiplier?: number
   games: number
   tier: TierId
   level: number
@@ -79,7 +81,7 @@ function LeaderTable({ rows, period }: { rows: LeaderRow[]; period: string }) {
   if (!rows.length) {
     return (
       <div className="rounded-2xl bg-white/5 px-6 py-8 text-center text-white/60">
-        Ainda sem pontuação em {period}. Seja o primeiro!
+        No scores yet for {period}. Be the first!
       </div>
     )
   }
@@ -111,14 +113,21 @@ function LeaderTable({ rows, period }: { rows: LeaderRow[]; period: string }) {
                 <TierBadge tier={row.tier} level={row.level} size="sm" />
               </div>
               <div className="text-xs text-white/50">
-                {row.games} {row.games === 1 ? "partida" : "partidas"}
+                {row.games} {row.games === 1 ? "game" : "games"}
               </div>
             </div>
             <div className="shrink-0 text-right">
               <div className="text-lg font-bold tabular-nums text-white">
-                {row.points.toLocaleString("pt-BR")}
+                {row.points.toLocaleString("en-US")}
               </div>
-              <div className="text-[11px] uppercase tracking-wider text-white/40">pts</div>
+              <div className="text-[11px] tabular-nums text-white/40">
+                {Math.round(row.points / row.games).toLocaleString("en-US")}/game
+              </div>
+              {row.multiplier && row.multiplier > 1 && (
+                <div className="mt-0.5 text-[10px] font-bold text-amber-300">
+                  ×{row.multiplier.toFixed(2)}
+                </div>
+              )}
             </div>
           </li>
         )
@@ -155,7 +164,7 @@ function HallOfFameList({ entries, emptyMsg }: { entries: HallOfFameEntry[]; emp
                   <span className="w-6 text-center">{medalFor(t.rank)}</span>
                   <span className="flex-1 truncate text-white">{t.realName}</span>
                   <span className="tabular-nums font-semibold text-amber-200">
-                    {t.points.toLocaleString("pt-BR")}
+                    {t.points.toLocaleString("en-US")}
                   </span>
                 </li>
               ))}
@@ -185,7 +194,7 @@ export default function RankingPage() {
         setData(resp.data)
         setError("")
       } else {
-        setError("Não foi possível carregar o ranking.")
+        setError("Unable to load the ranking.")
       }
     }
     (socket as any).on("leaderboards:data", onData)
@@ -207,10 +216,10 @@ export default function RankingPage() {
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">Ranking</h1>
             <p className="text-sm text-white/60">
-              O ranking semanal mostra a última semana encerrada (atualiza toda segunda). Só partidas em modo clássico contam — solo vale XP mas não ranking.
+              The weekly ranking shows the current week (updates after each match). Only Classic mode matches count — Solo earns XP but not ranking.
             </p>
           </div>
-          <Button onClick={() => router.push("/")}>Voltar</Button>
+          <Button onClick={() => router.push("/")}>Back</Button>
         </header>
 
         {error && (
@@ -221,7 +230,7 @@ export default function RankingPage() {
 
         {!data && !error && (
           <div className="rounded-2xl bg-white/5 px-6 py-10 text-center text-white/60">
-            Carregando…
+            Loading…
           </div>
         )}
 
@@ -237,7 +246,7 @@ export default function RankingPage() {
                     : "bg-white/10 text-white/80 hover:bg-white/20"
                 )}
               >
-                Semana · {data.week.label}
+                Week · {data.week.label}
               </button>
               <button
                 onClick={() => setTab("month")}
@@ -248,7 +257,7 @@ export default function RankingPage() {
                     : "bg-white/10 text-white/80 hover:bg-white/20"
                 )}
               >
-                Mês · {data.month.label}
+                Month · {data.month.label}
               </button>
             </div>
 
@@ -260,27 +269,27 @@ export default function RankingPage() {
               </div>
               <LeaderTable
                 rows={active?.top ?? []}
-                period={tab === "week" ? "a semana passada" : "este mês"}
+                period={tab === "week" ? "last week" : "this month"}
               />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-amber-200">
-                  🏆 Hall da Fama semanal
+                  🏆 Weekly Hall of Fame
                 </h3>
                 <HallOfFameList
                   entries={data.weeklyHof}
-                  emptyMsg="Ainda sem semanas encerradas."
+                  emptyMsg="No weeks closed yet."
                 />
               </div>
               <div>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-amber-200">
-                  🏆 Hall da Fama mensal
+                  🏆 Monthly Hall of Fame
                 </h3>
                 <HallOfFameList
                   entries={data.monthlyHof}
-                  emptyMsg="Ainda sem meses encerrados."
+                  emptyMsg="No months closed yet."
                 />
               </div>
             </div>

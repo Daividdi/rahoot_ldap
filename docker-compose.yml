@@ -1,0 +1,29 @@
+services:
+  rahoot2:
+    build: .
+    container_name: rahoot2
+    ports:
+      - "${WEB_PORT:-3003}:3000"
+      - "${SOCKET_PORT:-3002}:3001"
+    volumes:
+      - ../config:/app/config
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - WEB_ORIGIN=${WEB_ORIGIN}
+      - SOCKET_URL=${SOCKET_URL}
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: rahoot2-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../images:/usr/share/nginx/html/images:ro
+    depends_on:
+      - rahoot2
+    restart: unless-stopped

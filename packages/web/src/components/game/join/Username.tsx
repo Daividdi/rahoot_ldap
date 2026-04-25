@@ -11,6 +11,7 @@ import clsx from "clsx"
 
 const STORAGE_KEY = "rahoot_real_name"
 const AVATAR_KEY = "rahoot_avatar_cfg"
+const FAV_3D_KEY = "rahoot_avatar_3d_id"
 
 const SKIN_COLORS = [
   "f8d9c0", "f2d3b1", "e8b98a", "c68642",
@@ -115,6 +116,8 @@ const Username = () => {
   const [hijabExpr, setHijabExpr] = useState("smile")
   const [bsExpr, setBsExpr] = useState("cheery")
   const [useAvatar, setUseAvatar] = useState(true)
+  const [active3dId, setActive3dId] = useState<string | null>(null)
+  const [avatarMode, setAvatarMode] = useState<"3d" | "classic">("classic")
   const [mainTab, setMainTab]   = useState<"avatar" | "history">("avatar")
   const [historyData, setHistoryData] = useState<{ history: any[]; leaderboard: any[] } | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -132,13 +135,22 @@ const Username = () => {
     ;(socket as any).on("player:history", handler)
   }
 
-  const avatarUrl = useAvatar ? buildAvatarUrl(seed, skin, hair, hairColor, accessory, hijabColor, hijabExpr, bsExpr) : ""
+  const avatarUrl = avatarMode === "3d" && active3dId
+    ? `/api/avatar3d/r3/icons/${active3dId}.png`
+    : (useAvatar ? buildAvatarUrl(seed, skin, hair, hairColor, accessory, hijabColor, hijabExpr, bsExpr) : "")
   const avatarConfig = JSON.stringify({ seed, skin, hair, hairColor, accessory, hijabColor, hijabExpr, bsExpr, useAvatar })
 
   useEffect(() => {
     const saved = getStoredRealName()
     if (saved) { setStoredName(saved); setRealName(saved); setNickname(saved); setStep("play") }
     else { setStep("register") }
+    try {
+      const fav3d = localStorage.getItem(FAV_3D_KEY)
+      if (fav3d) {
+        setActive3dId(fav3d)
+        setAvatarMode("3d")
+      }
+    } catch {}
     try {
       const av = getStoredAvatar()
       if (av) {
@@ -177,6 +189,29 @@ const Username = () => {
   }
 
   const handleKeyDown = (fn: () => void) => (event: KeyboardEvent) => { if (event.key === "Enter") fn() }
+
+  // Server pushes corrected name when manager has renamed this player
+  useEvent("player:nameCorrection" as any, (corrected: string) => {
+    if (!corrected) return
+    saveRealName(corrected)
+    setStoredName(corrected)
+    setRealName(corrected)
+    setNickname(corrected)
+  })
+
+  // On socket connect, ask if this clientId has an AKA so the name is
+  // pre-filled even before the player joins any game
+  useEffect(() => {
+    if (!socket) return
+    ;(socket as any).emit("player:checkName", (corrected: string | null) => {
+      if (!corrected) return
+      saveRealName(corrected)
+      setStoredName(corrected)
+      setRealName(corrected)
+      setNickname(corrected)
+      setStep(prev => prev === "register" ? "play" : prev)
+    })
+  }, [socket])
 
   useEvent("game:successJoin", (gameId) => {
     // Reset streak so it doesn't carry over from a previous quiz
@@ -233,14 +268,42 @@ const Username = () => {
       <div className="rounded-2xl bg-gradient-to-b from-primary/5 to-primary/10 p-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avatar</p>
-          <button
-            onClick={() => setUseAvatar(!useAvatar)}
-            className={clsx("rounded-full px-3 py-1 text-[10px] font-semibold transition-colors",
-              useAvatar ? "bg-primary text-white" : "bg-gray-200 text-gray-500")}
-          >
-            {useAvatar ? "On" : "Off"}
-          </button>
+          <div className="flex items-center gap-2">
+            {active3dId && (
+              <button
+                onClick={() => setAvatarMode(m => m === "3d" ? "classic" : "3d")}
+                className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-primary ring-1 ring-primary/30 hover:bg-primary/5 transition-colors"
+              >
+                {avatarMode === "3d" ? "Use Classic" : "Use 3D"}
+              </button>
+            )}
+            {avatarMode === "classic" && (
+              <button
+                onClick={() => setUseAvatar(!useAvatar)}
+                className={clsx("rounded-full px-3 py-1 text-[10px] font-semibold transition-colors",
+                  useAvatar ? "bg-primary text-white" : "bg-gray-200 text-gray-500")}
+              >
+                {useAvatar ? "On" : "Off"}
+              </button>
+            )}
+          </div>
         </div>
+
+        {avatarMode === "3d" && active3dId ? (
+          <div className="flex flex-col items-center py-2">
+            <div className="h-40 w-40 overflow-hidden rounded-3xl border-4 border-white bg-white shadow-lg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/avatar3d/r3/icons/${active3dId}.png`}
+                alt="3D avatar"
+                className="h-full w-full object-contain p-1"
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-gray-500 text-center">
+              Your active 3D avatar. <a href="/avatar" className="font-semibold text-primary hover:underline">Change</a>
+            </p>
+          </div>
+        ) : (<>
 
         {!useAvatar ? (
           <div className="flex flex-col items-center py-4">
@@ -260,7 +323,7 @@ const Username = () => {
                 </div>
                 <button
                   onClick={handleShuffle}
-                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-5 py-1.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition-all active:scale-95"
+                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-5 py-1.5 text-xs font-semibold text-white shadow-md hover:brightness-110 transition-[filter,transform] active:scale-[0.96]"
                 >
                   Shuffle
                 </button>
@@ -365,6 +428,7 @@ const Username = () => {
         </div>
           </>
         )}
+        </>)}
       </div>
 
       {/* ── Avatar tab ─────────────────────────────────────────── */}
@@ -390,7 +454,7 @@ const Username = () => {
             <>
               {/* Monthly leaderboard */}
               <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Top 10 — {new Date().toLocaleString("pt-BR", { month: "long", year: "numeric" })}</p>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Top 10 — {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}</p>
                 {historyData.leaderboard.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-3">No games this month yet.</p>
                 ) : (
@@ -403,7 +467,7 @@ const Username = () => {
                         </div>
                         <p className="flex-1 text-xs font-semibold text-gray-700 truncate">{p.realName}</p>
                         <div className="text-right shrink-0">
-                          <p className="text-xs font-bold text-gray-800">{p.points.toLocaleString("pt-BR")} <span className="text-[9px] text-gray-400">pts</span></p>
+                          <p className="text-xs font-bold text-gray-800">{p.points.toLocaleString("en-US")} <span className="text-[9px] text-gray-400">pts</span></p>
                           <p className="text-[9px] text-gray-400">{p.sessions} {p.sessions === 1 ? "game" : "games"}</p>
                         </div>
                       </div>
@@ -427,7 +491,7 @@ const Username = () => {
                           <span className="text-[10px] text-gray-500">#{s.player.rank}</span>
                           <span className="text-[10px] text-green-600 font-semibold">{s.player.correct} correct</span>
                           <span className="text-[10px] text-red-500 font-semibold">{s.player.incorrect} wrong</span>
-                          <span className="text-[10px] text-gray-400 ml-auto">{new Date(s.date).toLocaleDateString("pt-BR")}</span>
+                          <span className="text-[10px] text-gray-400 ml-auto">{new Date(s.date).toLocaleDateString("en-US")}</span>
                         </div>
                       </div>
                     ))}

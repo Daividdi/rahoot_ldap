@@ -18,7 +18,7 @@ type Props = {
 }
 
 const Responses = ({
-  data: { question, answers, responses, correct },
+  data: { question, answers, answerImages, responses, correct, image },
 }: Props) => {
   const [percentages, setPercentages] = useState<Record<string, string>>({})
   const [isMusicPlaying, setIsMusicPlaying] = useState(false)
@@ -61,6 +61,11 @@ const Responses = ({
           {question}
         </h2>
 
+        {Boolean(image) && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt={question} className="max-h-40 w-auto rounded-xl shadow-xl px-4 object-contain" style={{ outline: "1px solid rgba(255,255,255,0.12)" }} />
+        )}
+
         <div
           className={`mt-8 grid h-40 w-full max-w-3xl gap-4 px-2`}
           style={{ gridTemplateColumns: `repeat(${answers.length}, 1fr)` }}
@@ -92,7 +97,13 @@ const Responses = ({
               })}
               icon={ANSWERS_ICONS[key]}
             >
-              {answer}
+              <span className="flex flex-col items-start gap-1 w-full">
+                {answerImages?.[key] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={answerImages[key]!} alt="" className="w-full rounded-lg object-contain border border-white/20" style={{ maxHeight: "100px" }} />
+                )}
+                {answer && <span>{answer}</span>}
+              </span>
             </AnswerButton>
           ))}
         </div>

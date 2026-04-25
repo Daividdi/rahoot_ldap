@@ -101,8 +101,8 @@ function ResultsPanel({
   const myRank      = me ? results.players.indexOf(me) + 1 : null
   const myAnswers   = (me?.answers as any[]) || []
   const myCorrect   = myAnswers.filter(a => a.isCorrect === true).length
-  const myIncorrect = myAnswers.filter(a => !a.isCorrect && a.selectedAnswer !== "Não respondeu").length
-  const myUnanswered = myAnswers.filter(a => a.selectedAnswer === "Não respondeu").length
+  const myIncorrect = myAnswers.filter(a => !a.isCorrect && a.selectedAnswer !== "Não respondeu" && a.selectedAnswer !== "Not answered" && a.selectedAnswer !== -1).length
+  const myUnanswered = myAnswers.filter(a => a.selectedAnswer === "Não respondeu" || a.selectedAnswer === "Not answered" || a.selectedAnswer === -1).length
 
   // Fetch monthly leaderboard whenever tab is active or filters change
   useEffect(() => {
@@ -132,7 +132,7 @@ function ResultsPanel({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
           <div>
-            <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">Resultados</p>
+            <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">Results</p>
             <h2 className="text-lg font-bold leading-tight">{results.quizTitle}</h2>
           </div>
           <button onClick={onClose} className="rounded-full bg-white/10 p-2 hover:bg-white/20 transition-colors">
@@ -170,7 +170,7 @@ function ResultsPanel({
         {tab === "monthly" && (
           <div className="flex items-center gap-2 px-4 pb-2 shrink-0 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Mín. jogos</span>
+              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Min games</span>
               {[1, 2, 3, 5].map(n => (
                 <button key={n} onClick={() => setMinSessions(n)}
                   className={clsx("rounded-lg px-2.5 py-1 text-xs font-bold transition-colors",
@@ -216,7 +216,7 @@ function ResultsPanel({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={clsx("font-semibold text-sm truncate", isMe ? "text-white" : "text-gray-200")}>
-                        {p.username}{isMe && <span className="ml-2 text-[10px] text-primary font-bold">Você</span>}
+                        {p.username}{isMe && <span className="ml-2 text-[10px] text-primary font-bold">You</span>}
                       </p>
                       {p.answers?.length > 0 && (
                         <p className="text-[10px] text-gray-500">
@@ -237,13 +237,13 @@ function ResultsPanel({
               ) : myAnswers.map((a, i) => (
                 <div key={i} className={clsx("rounded-xl p-3 border",
                   a.isCorrect ? "bg-green-900/30 border-green-700/40" :
-                  a.selectedAnswer === "Não respondeu" ? "bg-gray-800/60 border-gray-700/40" :
+                  (a.selectedAnswer === "Não respondeu" || a.selectedAnswer === "Not answered" || a.selectedAnswer === -1) ? "bg-gray-800/60 border-gray-700/40" :
                   "bg-red-900/30 border-red-700/40"
                 )}>
                   <div className="flex items-start gap-2">
                     {a.isCorrect
                       ? <IconCheck className="h-4 w-4 text-green-400 shrink-0 mt-0.5" />
-                      : a.selectedAnswer === "Não respondeu"
+                      : (a.selectedAnswer === "Não respondeu" || a.selectedAnswer === "Not answered" || a.selectedAnswer === -1)
                         ? <IconMinus className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
                         : <IconXCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
                     }
@@ -251,7 +251,7 @@ function ResultsPanel({
                       <p className="text-sm text-gray-200 font-medium leading-snug">{a.questionTitle}</p>
                       <p className={clsx("text-xs mt-0.5",
                         a.isCorrect ? "text-green-400" :
-                        a.selectedAnswer === "Não respondeu" ? "text-gray-500" : "text-red-400"
+                        (a.selectedAnswer === "Não respondeu" || a.selectedAnswer === "Not answered" || a.selectedAnswer === -1) ? "text-gray-500" : "text-red-400"
                       )}>{a.selectedAnswer}</p>
                     </div>
                   </div>
@@ -271,7 +271,7 @@ function ResultsPanel({
               {lbLoading ? (
                 <div className="flex flex-col items-center gap-3 py-10">
                   <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-                  <p className="text-xs text-gray-500">Carregando ranking mensal…</p>
+                  <p className="text-xs text-gray-500">Loading monthly ranking…</p>
                 </div>
               ) : leaderboard.length === 0 ? (
                 <p className="text-center text-gray-500 py-8 text-sm">Nenhum jogador encontrado com os filtros selecionados.</p>
@@ -280,7 +280,7 @@ function ResultsPanel({
                   <p className="text-[10px] text-gray-500 text-center pb-1">
                     {sortBy === "total" ? "Ordenado por pontos totais" :
                      sortBy === "average" ? "Ordenado por média por jogo" :
-                     "Ordenado por média × participação"}
+                     "Sorted by average × participation"}
                   </p>
                   {leaderboard.map((e, i) => {
                     const isMe = norm(e.realName) === norm(currentUsername)
@@ -296,7 +296,7 @@ function ResultsPanel({
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className={clsx("font-semibold text-sm truncate", isMe ? "text-white" : "text-gray-200")}>
-                            {e.realName}{isMe && <span className="ml-2 text-[10px] text-primary font-bold">Você</span>}
+                            {e.realName}{isMe && <span className="ml-2 text-[10px] text-primary font-bold">You</span>}
                           </p>
                           <p className="text-[10px] text-gray-500">
                             {e.sessions} {e.sessions === 1 ? "jogo" : "jogos"} · média {e.avgPoints} pts
@@ -535,9 +535,9 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
             initial={{ opacity: 0, x: 60, scale: 0.8 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 60 }}
             transition={{ type: "spring", stiffness: 280, damping: 22 }}
             onClick={handleResultsClick}
-            className="fixed bottom-5 right-4 z-[155] flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-2xl hover:brightness-110 active:scale-95 transition-all border border-white/20">
+            className="fixed bottom-5 right-4 z-[155] flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-2xl hover:brightness-110 active:scale-[0.96] transition-[filter,transform] border border-white/20">
             <IconTrophy className="h-4 w-4" />
-            {resultsLoading && !fullResults ? "Aguardando..." : "Ver Resultados"}
+            {resultsLoading && !fullResults ? "Loading..." : "View Results"}
           </motion.button>
         )}
       </AnimatePresence>
@@ -561,7 +561,7 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-                  <p className="text-white/70 text-sm font-medium">Aguardando resultados do servidor…</p>
+                  <p className="text-white/70 text-sm font-medium">Waiting for results from server…</p>
                   <button onClick={() => setShowResultsPanel(false)} className="mt-2 rounded-lg bg-white/10 px-5 py-2 text-sm font-semibold hover:bg-white/20">Fechar</button>
                 </motion.div>
               </motion.div>

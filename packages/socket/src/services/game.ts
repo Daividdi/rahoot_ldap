@@ -448,8 +448,12 @@ class Game {
 
         player.answers.push({
           questionTitle: question.question || "Question",
-          selectedAnswer: answerText,
+          // Numeric index (or -1 if unanswered) — report page uses this for bucket counts
+          selectedAnswer: playerAnswer ? playerAnswer.answerId : -1,
+          // Human-readable answer, for display in the report
+          selectedAnswerText: answerText,
           correctAnswer: correctText,
+          correctIndex: question.solution,
           isCorrect: isCorrect,
         })
         // Fim da Injeção Analítica
@@ -491,6 +495,7 @@ class Game {
       responses: totalType,
       correct: question.solution,
       answers: question.answers,
+      answerImages: question.answerImages,
       image: question.image,
     })
 
@@ -498,6 +503,7 @@ class Game {
     this.io.to(this.gameId).emit("game:correctAnswer", {
       question: question.question,
       answers: question.answers,
+      answerImages: question.answerImages,
       correct: question.solution,
     })
 

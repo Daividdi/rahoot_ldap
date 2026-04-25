@@ -119,7 +119,7 @@ export default function SoloGamePage() {
         setStage("error")
         setError(
           data.reason === "not_found" ? "Quiz não encontrado."
-            : data.reason === "no_attempts_left" ? "Você já usou todas as tentativas deste quiz."
+            : data.reason === "no_attempts_left" ? "You've already used all attempts for this quiz."
             : data.reason === "solo_disabled" ? "Este quiz não permite modo solo."
             : "Erro ao carregar quiz."
         )
@@ -166,7 +166,7 @@ export default function SoloGamePage() {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
     const ms = Date.now() - questionStartRef.current
     const isCorrect = chosen !== null && chosen === question.solution
-    const selectedText = chosen === null ? "Não respondeu" : question.answers[chosen] ?? "Não respondeu"
+    const selectedText = chosen === null ? "Not answered" : question.answers[chosen] ?? "Not answered"
     const gained = scoreFor(isCorrect, ms, question.time * 1000)
 
     setSelected(chosen)
@@ -220,23 +220,23 @@ export default function SoloGamePage() {
       <Shell>
         <div className="flex flex-col gap-3">
           <h2 className="text-lg font-bold text-gray-800">Identifique-se</h2>
-          <p className="text-sm text-gray-500">Para salvar seu progresso e limitar tentativas.</p>
+          <p className="text-sm text-gray-500">To save your progress and limit attempts.</p>
           <Input
             value={registerInput}
             onChange={e => setRegisterInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleRegisterName()}
-            placeholder="Seu nome completo"
+            placeholder="Your full name"
             maxLength={40}
             autoFocus
           />
-          <Button onClick={handleRegisterName}>Começar</Button>
+          <Button onClick={handleRegisterName}>Start</Button>
         </div>
       </Shell>
     )
   }
 
   if (stage === "loading" || !isConnected) {
-    return <Shell><div className="py-8 text-center text-sm text-gray-400">Carregando…</div></Shell>
+    return <Shell><div className="py-8 text-center text-sm text-gray-400">Loading…</div></Shell>
   }
 
   if (stage === "error") {
@@ -253,15 +253,15 @@ export default function SoloGamePage() {
             <h2 className="text-lg font-bold text-gray-800">{resp.quiz.subject}</h2>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="Questões" value={resp.quiz.questions.length} />
+            <Stat label="Questions" value={resp.quiz.questions.length} />
             <Stat label="Tempo" value={`${resp.quiz.questions.reduce((s, q) => s + q.time, 0)}s`} />
             <Stat label="Tentativas" value={`${remaining}/${resp.maxAttempts}`} highlight={remaining > 0} />
           </div>
           <p className="text-[11px] text-gray-500">
-            Você tem <span className="font-bold">{remaining}</span> {remaining === 1 ? "tentativa" : "tentativas"} restantes para este quiz.
-            Resultados contam para XP e conquistas, mas não para o ranking semanal.
+            You have <span className="font-bold">{remaining}</span> {remaining === 1 ? "attempt" : "attempts"} remaining for this quiz.
+            Results count toward XP and achievements, but not the weekly ranking.
           </p>
-          <Button onClick={handleStart}>Começar</Button>
+          <Button onClick={handleStart}>Start</Button>
         </div>
       </Shell>
     )
@@ -315,10 +315,10 @@ export default function SoloGamePage() {
           </div>
 
           <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
-            <span>Pontos: <span className="tabular-nums text-gray-800">{points}</span></span>
+            <span>Points: <span className="tabular-nums text-gray-800">{points}</span></span>
             {showingAnswer && (
               <span className={selected === question.solution ? "text-green-600" : "text-red-500"}>
-                {selected === question.solution ? "✓ Correto" : selected === null ? "Tempo esgotado" : "✗ Errado"}
+                {selected === question.solution ? "✓ Correct" : selected === null ? "Time up" : "✗ Wrong"}
               </span>
             )}
           </div>
@@ -341,7 +341,7 @@ export default function SoloGamePage() {
           </div>
 
           <div className="grid w-full grid-cols-4 gap-2">
-            <Stat label="Acertos" value={result.correct} />
+            <Stat label="Correct" value={result.correct} />
             <Stat label="Erros" value={result.incorrect} />
             <Stat label="Streak" value={result.longestStreak} />
             <Stat label="+XP" value={result.xpGained} highlight />
@@ -354,7 +354,7 @@ export default function SoloGamePage() {
           {result.newBadges.length > 0 && (
             <div className="w-full rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 p-3 ring-1 ring-amber-200">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-700">
-                Novas conquistas
+                New achievements
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {result.newBadges.map(b => (
@@ -381,7 +381,7 @@ export default function SoloGamePage() {
               href="/"
               className="rounded-lg bg-white px-4 py-3 text-xs font-semibold text-gray-500 ring-1 ring-gray-200 hover:text-primary"
             >
-              Voltar
+              Back
             </a>
           </div>
         </div>
