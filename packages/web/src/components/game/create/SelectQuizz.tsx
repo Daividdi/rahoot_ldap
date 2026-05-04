@@ -826,13 +826,10 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
       </div>{/* end scrollable */}
       {/* Mode picker — always visible, outside scroll area */}
       <div className="shrink-0 px-5 pb-4 pt-3 bg-[#f8fafc] border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-        {!selected ? (
-          <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white/50 px-4 py-6 text-center">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" className="h-8 w-8 mx-auto mb-2"><path d="M5 3l14 9-14 9V3z"/></svg>
-            <p className="text-sm font-medium text-gray-400">Select a quiz above to choose how to play</p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-3">
+        {!selected && (
+          <p className="mb-2 text-center text-xs font-medium text-gray-400">&#9650; Select a quiz above to start playing</p>
+        )}
+        <div className={"grid gap-3 sm:grid-cols-3" + (!selected ? " pointer-events-none opacity-50" : "")}>
             {/* Classic */}
             <div className="flex flex-col rounded-xl border-2 border-accent bg-white overflow-hidden shadow-sm">
               <div className="bg-accent/8 px-4 py-3 border-b border-accent/15 flex items-center gap-2.5">
@@ -859,20 +856,19 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               </div>
               <div className="p-4 flex flex-col flex-1">
                 <p className="text-[11px] text-gray-500 leading-snug flex-1">Players pick Team A or B. Scores balanced by team size — fairer with unequal groups.</p>
-                <Button onClick={() => onSelect(selected, "team")} className="mt-3 py-2 text-sm bg-orange-500 hover:bg-orange-600">Start Team vs Team</Button>
+                <Button onClick={() => selected && onSelect(selected, "team")} className="mt-3 py-2 text-sm bg-orange-500 hover:bg-orange-600">Start Team vs Team</Button>
               </div>
             </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   )
 }
 
-function SoloCard({ selected, selectedQuiz }: { selected: string; selectedQuiz: any | null }) {
+function SoloCard({ selected, selectedQuiz }: { selected: string | null; selectedQuiz: any | null }) {
   const [copied, setCopied] = React.useState(false)
   const soloEnabled = selectedQuiz?.solo?.enabled !== false
-  const url = typeof window !== "undefined" ? window.location.origin + "/solo/" + encodeURIComponent(selected) : ""
+  const url = typeof window !== "undefined" ? window.location.origin + "/solo/" + encodeURIComponent(selected || "") : ""
   const handleCopy = async () => {
     if (!soloEnabled) return
     try {
