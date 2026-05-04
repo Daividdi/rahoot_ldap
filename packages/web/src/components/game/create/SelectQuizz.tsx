@@ -72,7 +72,7 @@ const compressImage = (file: File, maxW = 800, maxH = 600, quality = 0.82): Prom
 
 const blankQuestion = () => ({
   question: "", answers: ["", "", "", ""], answerImages: [null, null, null, null] as (string | null)[],
-  solution: 0, cooldown: 5, time: 15, image: ""
+  solution: 0 as number | number[], cooldown: 5, time: 15, image: "", multipleAnswers: false
 })
 
 const DRAFT_PREFIX = "rahoot_draft_"
@@ -586,7 +586,27 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               {/* Question header */}
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-primary">Question {qi + 1}</span>
-                <button onClick={() => removeQuestion(qi)} className="text-xs font-semibold text-red-400 hover:text-red-600">Remove</button>
+                <div className="flex items-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-primary transition-colors select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!q.multipleAnswers}
+                      onChange={() => {
+                        const isMulti = !q.multipleAnswers
+                        const currentSol = q.solution
+                        const newSol = isMulti
+                          ? (Array.isArray(currentSol) ? currentSol : [currentSol])
+                          : (Array.isArray(currentSol) ? (currentSol[0] ?? 0) : currentSol)
+                        const updated = [...questions]
+                        updated[qi] = { ...updated[qi], multipleAnswers: isMulti, solution: newSol }
+                        setQuestions(updated)
+                      }}
+                      className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                    />
+                    Multiple answers
+                  </label>
+                  <button onClick={() => removeQuestion(qi)} className="text-xs font-semibold text-red-400 hover:text-red-600">Remove</button>
+                </div>
               </div>
 
               {/* Question text */}
@@ -630,7 +650,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               {/* Answer options */}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 {q.answers.map((a: string, ai: number) => (
-                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex h-20 transition-all", ANSWER_COLORS[ai], q.solution === ai ? "ring-2 ring-green-400 ring-offset-1" : "")}>
+                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex h-20 transition-all", ANSWER_COLORS[ai], (Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) ? "ring-2 ring-green-400 ring-offset-1" : "")}>
                     {/* Square image zone */}
                     <div className="relative w-20 h-20 shrink-0 bg-black/10 overflow-hidden group/img">
                       {q.answerImages?.[ai] ? (
@@ -658,7 +678,20 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                     </div>
                     {/* Text area */}
                     <div className="flex flex-1 items-center gap-2 px-3">
-                      <input type="radio" name={`sol-${qi}`} checked={q.solution === ai} onChange={() => updateQuestion(qi, "solution", ai)} className="h-4 w-4 cursor-pointer accent-green-400 shrink-0" />
+                      {q.multipleAnswers ? (
+                        <input
+                          type="checkbox"
+                          checked={Array.isArray(q.solution) && q.solution.includes(ai)}
+                          onChange={() => {
+                            const sols: number[] = Array.isArray(q.solution) ? q.solution : [q.solution]
+                            const next = sols.includes(ai) ? sols.filter(s => s !== ai) : [...sols, ai]
+                            updateQuestion(qi, "solution", next)
+                          }}
+                          className="h-4 w-4 cursor-pointer accent-green-400 shrink-0"
+                        />
+                      ) : (
+                        <input type="radio" name={`sol-${qi}`} checked={q.solution === ai} onChange={() => updateQuestion(qi, "solution", ai)} className="h-4 w-4 cursor-pointer accent-green-400 shrink-0" />
+                      )}
                       {q.answerImages?.[ai] ? (
                         <span className="flex-1 text-sm font-semibold text-white/50 italic min-w-0 truncate">
                           {a || "Image answer"}
@@ -671,7 +704,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                           onChange={(e) => updateAnswer(qi, ai, e.target.value)}
                         />
                       )}
-                      {q.solution === ai && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-400 text-[11px] font-bold text-white">✓</span>}
+                      {(Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-400 text-[11px] font-bold text-white">✓</span>}
                     </div>
                   </div>
                 ))}

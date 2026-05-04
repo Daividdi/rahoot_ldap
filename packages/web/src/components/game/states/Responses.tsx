@@ -93,7 +93,7 @@ const Responses = ({
             <AnswerButton
               key={key}
               className={clsx(ANSWERS_COLORS[key], {
-                "opacity-65": responses && correct !== key,
+                "opacity-65": responses && (Array.isArray(correct) ? !correct.includes(key) : correct !== key),
               })}
               icon={ANSWERS_ICONS[key]}
             >

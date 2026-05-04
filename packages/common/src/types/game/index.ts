@@ -20,7 +20,8 @@ export type Quizz = {
     video?: string
     audio?: string
     answers: string[]
-    solution: number
+    solution: number | number[]
+    multipleAnswers?: boolean
     cooldown: number
     time: number
   }[]

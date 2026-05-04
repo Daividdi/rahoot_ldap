@@ -395,6 +395,7 @@ class Game {
       audio: question.audio,
       time: question.time,
       totalPlayer: this.players.length,
+      multipleAnswers: Array.isArray(question.solution),
     })
 
     await this.startCooldown(question.time)
@@ -414,8 +415,8 @@ class Game {
 
     const totalType = this.round.playersAnswers.reduce(
       (acc: Record<number, number>, { answerId }) => {
-        acc[answerId] = (acc[answerId] || 0) + 1
-
+        const ids = Array.isArray(answerId) ? answerId : [answerId]
+        ids.forEach((id: number) => { acc[id] = (acc[id] || 0) + 1 })
         return acc
       },
       {},
@@ -427,8 +428,12 @@ class Game {
           (a) => a.playerId === player.id,
         )
 
+        const isMultiple = Array.isArray(question.solution)
         const isCorrect = playerAnswer
-          ? playerAnswer.answerId === question.solution
+          ? isMultiple
+            ? Array.isArray(playerAnswer.answerId) &&
+              [...playerAnswer.answerId].sort().join(",") === [...(question.solution as number[])].sort().join(",")
+            : playerAnswer.answerId === question.solution
           : false
 
         const points =
@@ -442,9 +447,13 @@ class Game {
         }
         
         const answerText = playerAnswer
-          ? (question.answers[playerAnswer.answerId] ?? String(playerAnswer.answerId))
+          ? Array.isArray(playerAnswer.answerId)
+            ? playerAnswer.answerId.map((id: number) => question.answers[id] ?? String(id)).join(", ")
+            : (question.answers[playerAnswer.answerId] ?? String(playerAnswer.answerId))
           : "Not answered"
-        const correctText = question.answers[question.solution] ?? String(question.solution)
+        const correctText = Array.isArray(question.solution)
+          ? (question.solution as number[]).map((s: number) => question.answers[s] ?? String(s)).join(", ")
+          : (question.answers[question.solution] ?? String(question.solution))
 
         player.answers.push({
           questionTitle: question.question || "Question",
@@ -513,7 +522,7 @@ class Game {
     this.round.playersAnswers = []
   }
 
-  selectAnswer(socket: Socket, answerId: number) {
+  selectAnswer(socket: Socket, answerId: number | number[]) {
     const player = this.players.find((player) => player.id === socket.id)
     const question = this.quizz.questions[this.round.currentQuestion]
 
@@ -527,7 +536,7 @@ class Game {
 
     this.round.playersAnswers.push({
       playerId: player.id,
-      answerId,
+      answerId: Array.isArray(answerId) ? [...answerId] : answerId,
       points: timeToPoint(this.round.startTime, question.time),
     })
 

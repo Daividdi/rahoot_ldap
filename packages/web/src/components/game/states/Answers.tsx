@@ -20,7 +20,7 @@ type Props = {
 }
 
 const Answers = ({
-  data: { question, answers, answerImages, image, audio, video, time, totalPlayer },
+  data: { question, answers, answerImages, image, audio, video, time, totalPlayer, multipleAnswers },
 }: Props) => {
   const { gameId }: { gameId?: string } = useParams()
   const { socket } = useSocket()
@@ -29,6 +29,7 @@ const Answers = ({
   const [cooldown, setCooldown] = useState(time)
   const [totalAnswer, setTotalAnswer] = useState(0)
   const [answered, setAnswered] = useState(false)
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([])
 
   const [sfxPop] = useSound(SFX_ANSWERS_SOUND, { volume: 0.1 })
   const [playMusic, { stop: stopMusic }] = useSound(SFX_ANSWERS_MUSIC, {
@@ -40,6 +41,21 @@ const Answers = ({
   const handleAnswer = (answerKey: number) => () => {
     if (!player || answered) return
     socket?.emit("player:selectedAnswer", { gameId, data: { answerKey } })
+    sfxPop()
+    setAnswered(true)
+  }
+
+  const handleToggle = (answerKey: number) => () => {
+    if (!player || answered) return
+    sfxPop()
+    setSelectedAnswers(prev =>
+      prev.includes(answerKey) ? prev.filter(k => k !== answerKey) : [...prev, answerKey]
+    )
+  }
+
+  const handleConfirm = () => {
+    if (!player || answered || selectedAnswers.length === 0) return
+    socket?.emit("player:selectedAnswer", { gameId, data: { answerKey: selectedAnswers } })
     sfxPop()
     setAnswered(true)
   }
@@ -115,12 +131,18 @@ const Answers = ({
         <div className={clsx("mx-auto mb-3 grid w-full max-w-7xl gap-3 px-3", "grid-cols-2")}>
           {answers.map((answer, key) => {
             const img = answerImages?.[key]
+            const isSelected = multipleAnswers && selectedAnswers.includes(key)
             return (
               <AnswerButton
                 key={key}
-                className={clsx(ANSWERS_COLORS[key], answered && "opacity-60 pointer-events-none", img && "!py-3 !items-start")}
+                className={clsx(
+                  ANSWERS_COLORS[key],
+                  answered && "opacity-60 pointer-events-none",
+                  img && "!py-3 !items-start",
+                  isSelected && "ring-4 ring-white/70 brightness-110",
+                )}
                 icon={ANSWERS_ICONS[key]}
-                onClick={handleAnswer(key)}
+                onClick={multipleAnswers ? handleToggle(key) : handleAnswer(key)}
               >
                 <span className="flex flex-col items-start gap-1.5 w-full">
                   {img && (
@@ -138,6 +160,22 @@ const Answers = ({
             )
           })}
         </div>
+        {multipleAnswers && !answered && (
+          <div className="mx-auto mb-2 flex w-full max-w-7xl justify-center px-3">
+            <button
+              onClick={handleConfirm}
+              disabled={selectedAnswers.length === 0}
+              className={clsx(
+                "rounded-2xl px-10 py-3 text-base font-black text-white shadow-lg transition-all duration-150 active:scale-[0.97]",
+                selectedAnswers.length > 0
+                  ? "bg-white/20 hover:bg-white/30 backdrop-blur-sm"
+                  : "bg-white/5 opacity-40 cursor-not-allowed"
+              )}
+            >
+              {selectedAnswers.length === 0 ? "Select answers" : `Confirm (${selectedAnswers.length} selected)`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
