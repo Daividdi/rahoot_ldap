@@ -8,6 +8,7 @@ import Question from "@rahoot/web/components/game/states/Question"
 import Result from "@rahoot/web/components/game/states/Result"
 import Start from "@rahoot/web/components/game/states/Start"
 import Wait from "@rahoot/web/components/game/states/Wait"
+import TeamSelect from "@rahoot/web/components/game/states/TeamSelect"
 import PlayerPodium from "@rahoot/web/components/game/states/PlayerPodium"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
@@ -17,6 +18,7 @@ import toast from "react-hot-toast"
 
 const PLAYER_STATES = new Set([
   STATUS.SELECT_ANSWER,
+  STATUS.SELECT_TEAM,
   STATUS.SHOW_QUESTION,
   STATUS.WAIT,
   STATUS.SHOW_START,
@@ -94,6 +96,9 @@ const Game = () => {
       break
     case STATUS.SELECT_ANSWER:
       component = <Answers data={status.data} />
+      break
+    case STATUS.SELECT_TEAM:
+      component = <TeamSelect data={status.data} />
       break
   }
 

@@ -61,6 +61,32 @@ const Leaderboard = ({ data, isFinal = false }: any) => {
         Leaderboard
       </h2>
 
+      {data?.teamMode && data?.teamScores && (
+        <div className="mb-4 flex w-full max-w-4xl gap-3">
+          <div className={clsx(
+            "flex flex-1 flex-col items-center rounded-2xl px-4 py-3 font-black",
+            data.teamScores.A >= data.teamScores.B
+              ? "bg-blue-500 shadow-lg shadow-blue-500/30 ring-2 ring-blue-300"
+              : "bg-blue-500/50"
+          )}>
+            <span className="text-xs font-bold uppercase tracking-widest text-blue-100/80">Team A</span>
+            <span className="text-3xl text-white tabular-nums">{data.teamScores.A}</span>
+            <span className="text-[10px] text-white/50">avg pts</span>
+          </div>
+          <div className="flex items-center font-black text-white/40 text-xl">VS</div>
+          <div className={clsx(
+            "flex flex-1 flex-col items-center rounded-2xl px-4 py-3 font-black",
+            data.teamScores.B > data.teamScores.A
+              ? "bg-red-500 shadow-lg shadow-red-500/30 ring-2 ring-red-300"
+              : "bg-red-500/50"
+          )}>
+            <span className="text-xs font-bold uppercase tracking-widest text-red-100/80">Team B</span>
+            <span className="text-3xl text-white tabular-nums">{data.teamScores.B}</span>
+            <span className="text-[10px] text-white/50">avg pts</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex w-full flex-col gap-3 relative">
         <AnimatePresence mode="popLayout">
           {displayList.map((player: any, displayIdx: number) => {
@@ -125,8 +151,13 @@ const Leaderboard = ({ data, isFinal = false }: any) => {
 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
-                  <div className={clsx("truncate", rank === 0 ? "text-2xl" : rank < 3 ? "text-xl" : "text-lg")}>
+                  <div className={clsx("flex items-center gap-2 truncate", rank === 0 ? "text-2xl" : rank < 3 ? "text-xl" : "text-lg")}>
                     {player.username || player.name}
+                    {(player as any).team && (
+                      <span className={clsx("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                        (player as any).team === "A" ? "bg-blue-400/30 text-blue-200" : "bg-red-400/30 text-red-200"
+                      )}>{(player as any).team}</span>
+                    )}
                   </div>
                   {(player as any).realName && (player as any).realName !== (player.username || player.name) && (
                     <div className="text-xs text-white/40 truncate">{(player as any).realName}</div>

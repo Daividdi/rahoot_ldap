@@ -17,6 +17,7 @@ const Room = ({ data: { text, inviteCode } }: Props) => {
   const { players } = useManagerStore()
   const [playerList, setPlayerList] = useState<Player[]>(players)
   const [totalPlayers, setTotalPlayers] = useState(0)
+  const [teamCounts, setTeamCounts] = useState({ teamA: 0, teamB: 0 })
 
   useEvent("manager:newPlayer", (player) => {
     setPlayerList([...playerList, player])
@@ -32,6 +33,14 @@ const Room = ({ data: { text, inviteCode } }: Props) => {
 
   useEvent("game:totalPlayers", (total) => {
     setTotalPlayers(total)
+  })
+
+  useEvent("game:teamUpdate" as any, (update: { teamA: number; teamB: number }) => {
+    setTeamCounts(update)
+  })
+
+  useEvent("manager:playerTeam" as any, ({ playerId, team }: { playerId: string; team: "A" | "B" }) => {
+    setPlayerList(prev => prev.map(p => p.id === playerId ? { ...p, team } as any : p))
   })
 
   const handleKick = (playerId: string) => () => {
@@ -72,10 +81,22 @@ const Room = ({ data: { text, inviteCode } }: Props) => {
         {text}
       </h2>
 
-      <div className="mb-6 flex items-center justify-center rounded-full bg-black/40 px-6 py-3">
-        <span className="text-2xl font-bold text-white drop-shadow-md">
-          Players Joined: {totalPlayers}
-        </span>
+      <div className="mb-4 flex items-center justify-center gap-3 flex-wrap">
+        <div className="rounded-full bg-black/40 px-6 py-3">
+          <span className="text-2xl font-bold text-white drop-shadow-md">Players Joined: {totalPlayers}</span>
+        </div>
+        {(teamCounts.teamA > 0 || teamCounts.teamB > 0) && (
+          <div className="flex gap-2">
+            <div className="flex items-center gap-1.5 rounded-full bg-blue-500/70 px-4 py-2">
+              <span className="text-base font-black text-white">&#x1F535; A</span>
+              <span className="text-xl font-black text-white tabular-nums">{teamCounts.teamA}</span>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full bg-red-500/70 px-4 py-2">
+              <span className="text-base font-black text-white">&#x1F534; B</span>
+              <span className="text-xl font-black text-white tabular-nums">{teamCounts.teamB}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
@@ -108,6 +129,9 @@ const Room = ({ data: { text, inviteCode } }: Props) => {
               <div className="rounded-lg bg-primary px-3 py-1.5 shadow-md">
                 <span className="text-sm font-bold text-white drop-shadow-md group-hover:line-through">
                   {player.username}
+                  {p.team && (
+                    <span className={"ml-1 text-xs font-black " + (p.team === "A" ? "text-blue-300" : "text-red-300")}>{p.team}</span>
+                  )}
                 </span>
                 {p.realName && p.realName !== player.username && (
                   <span className="block text-center text-[10px] font-medium text-white/50">

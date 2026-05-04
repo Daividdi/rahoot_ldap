@@ -7,7 +7,7 @@ import ManagerAnalytics from "@rahoot/web/components/game/create/ManagerAnalytic
 
 type Props = {
   quizzList: QuizzWithId[]
-  onSelect: (_id: string) => void
+  onSelect: (_id: string, _mode?: "classic" | "team") => void
 }
 
 class ErrorBoundary extends Component<PropsWithChildren<{ fallback: string }>, { hasError: boolean; error: string }> {

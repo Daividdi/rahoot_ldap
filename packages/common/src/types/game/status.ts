@@ -11,6 +11,7 @@ export const STATUS = {
   SHOW_LEADERBOARD: "SHOW_LEADERBOARD",
   FINISHED: "FINISHED",
   WAIT: "WAIT",
+  SELECT_TEAM: "SELECT_TEAM",
 } as const
 
 export type Status = (typeof STATUS)[keyof typeof STATUS]
@@ -39,10 +40,13 @@ export type CommonStatusDataMap = {
     aheadOfMe: string | null
   }
   WAIT: { text: string }
+  SELECT_TEAM: { teamA: number; teamB: number }
   FINISHED: {
     subject: string
     top: Player[]
     questions?: Array<{ title: string; cancelled: boolean }>
+    teamMode?: boolean
+    teamScores?: { A: number; B: number }
   }
 }
 
@@ -57,7 +61,7 @@ type ManagerExtraStatus = {
     image?: string
     video?: string
   }
-  SHOW_LEADERBOARD: { oldLeaderboard: Player[]; leaderboard: Player[] }
+  SHOW_LEADERBOARD: { oldLeaderboard: Player[]; leaderboard: Player[]; teamMode?: boolean; teamScores?: { A: number; B: number } }
 }
 
 export type PlayerStatusDataMap = CommonStatusDataMap

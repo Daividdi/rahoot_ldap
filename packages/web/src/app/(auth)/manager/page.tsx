@@ -49,8 +49,8 @@ const Manager = () => {
     socket?.emit("manager:auth", password)
   }
 
-  const handleCreate = (quizzId: string) => {
-    socket?.emit("game:create", quizzId)
+  const handleCreate = (quizzId: string, mode: "classic" | "team" = "classic") => {
+    socket?.emit("game:create", { quizzId, mode })
   }
 
   if (isCheckingAuth) {

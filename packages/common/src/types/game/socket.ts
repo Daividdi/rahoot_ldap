@@ -34,6 +34,7 @@ export interface ServerToClientEvents {
   "game:reset": (_message: string) => void
   "game:updateQuestion": (_data: { current: number; total: number }) => void
   "game:playerAnswer": (_count: number) => void
+  "game:teamUpdate": (_data: { teamA: number; teamB: number }) => void
 
   // Player events
   "player:successReconnect": (_data: {
@@ -65,7 +66,7 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   // Manager actions
-  "game:create": (_quizzId: string) => void
+  "game:create": (_data: { quizzId: string; mode?: "classic" | "team" }) => void
   "manager:auth": (_password: string) => void
   "manager:reconnect": (_message: { gameId: string }) => void
   "manager:kickPlayer": (_message: { gameId: string; playerId: string }) => void
@@ -82,6 +83,8 @@ export interface ClientToServerEvents {
   "player:selectedAnswer": (
     _message: MessageWithoutStatus<{ answerKey: number | number[] }>
   ) => void
+
+  "player:joinTeam": (_message: MessageWithoutStatus<{ team: "A" | "B" }>) => void
 
   // Common
   disconnect: () => void

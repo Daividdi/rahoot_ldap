@@ -73,4 +73,5 @@ export const MANAGER_SKIP_BTN = {
   [STATUS.SHOW_LEADERBOARD]: "Next",
   [STATUS.FINISHED]: null,
   [STATUS.WAIT]: null,
+  [STATUS.SELECT_TEAM]: null,
 }

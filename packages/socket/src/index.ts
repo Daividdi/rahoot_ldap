@@ -74,11 +74,11 @@ io.on("connection", (socket) => {
     }
   })
 
-  socket.on("game:create", (quizzId) => {
+  socket.on("game:create", ({ quizzId, mode = "classic" }: { quizzId: string; mode?: "classic" | "team" }) => {
     const quizzList = Config.quizz()
     const quizz = quizzList.find((q) => q.id === quizzId)
     if (!quizz) { socket.emit("game:errorMessage", "Quizz not found"); return; }
-    const game = new Game(io, socket, quizz)
+    const game = new Game(io, socket, quizz, mode)
     registry.addGame(game)
   })
 
@@ -146,6 +146,10 @@ io.on("connection", (socket) => {
 
   socket.on("player:selectedAnswer", ({ gameId, data }) =>
     withGame(gameId, socket, (game) => game.selectAnswer(socket, data.answerKey)),
+  )
+
+  socket.on("player:joinTeam", ({ gameId, data }: any) =>
+    withGame(gameId, socket, (game: any) => game.assignTeam(socket, data.team)),
   )
 
   socket.on("manager:abortQuiz", ({ gameId }) =>

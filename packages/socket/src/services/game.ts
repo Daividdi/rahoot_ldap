@@ -30,6 +30,7 @@ class Game {
   }
   inviteCode: string
   started: boolean
+  mode: "classic" | "team"
 
   lastBroadcastStatus: { name: Status; data: StatusDataMap[Status] } | null =
     null
@@ -57,7 +58,7 @@ class Game {
   questionHistory: QuestionHistoryEntry[]
   cancelledQuestions: Set<number>
 
-  constructor(io: Server, socket: Socket, quizz: Quizz) {
+  constructor(io: Server, socket: Socket, quizz: Quizz, mode: "classic" | "team" = "classic") {
     if (!io) {
       throw new Error("Socket server not initialized")
     }
@@ -71,6 +72,7 @@ class Game {
     }
     this.inviteCode = ""
     this.started = false
+    this.mode = mode
 
     this.lastBroadcastStatus = null
     this.managerStatus = null
@@ -176,6 +178,11 @@ class Game {
     this.io.to(this.gameId).emit("game:totalPlayers", this.players.length)
 
     socket.emit("game:successJoin", this.gameId)
+
+    if (this.mode === "team") {
+      const teamCounts = this.getTeamCounts()
+      this.sendStatus(socket.id, STATUS.SELECT_TEAM, teamCounts)
+    }
   }
 
   kickPlayer(socket: Socket, playerId: string) {
@@ -522,6 +529,30 @@ class Game {
     this.round.playersAnswers = []
   }
 
+  getTeamCounts() {
+    const teamA = this.players.filter(p => p.team === "A").length
+    const teamB = this.players.filter(p => p.team === "B").length
+    return { teamA, teamB }
+  }
+
+  getTeamScores(): { A: number; B: number } {
+    const teamA = this.players.filter(p => p.team === "A")
+    const teamB = this.players.filter(p => p.team === "B")
+    const avgA = teamA.length > 0 ? teamA.reduce((s, p) => s + p.points, 0) / teamA.length : 0
+    const avgB = teamB.length > 0 ? teamB.reduce((s, p) => s + p.points, 0) / teamB.length : 0
+    return { A: Math.round(avgA), B: Math.round(avgB) }
+  }
+
+  assignTeam(socket: Socket, team: "A" | "B") {
+    const player = this.players.find(p => p.id === socket.id)
+    if (!player) return
+    player.team = team
+    const counts = this.getTeamCounts()
+    this.io.to(this.gameId).emit("game:teamUpdate", counts)
+    this.io.to(this.manager.id).emit("manager:playerTeam" as any, { playerId: player.id, team })
+    this.sendStatus(socket.id, STATUS.WAIT, { text: "Waiting for the game to start" })
+  }
+
   selectAnswer(socket: Socket, answerId: number | number[]) {
     const player = this.players.find((player) => player.id === socket.id)
     const question = this.quizz.questions[this.round.currentQuestion]
@@ -598,6 +629,7 @@ class Game {
           title: qh.question,
           cancelled: false,
         })),
+        ...(this.mode === "team" ? { teamMode: true, teamScores: this.getTeamScores() } : {}),
       })
 
       return
@@ -607,9 +639,14 @@ class Game {
       ? this.tempOldLeaderboard
       : this.leaderboard
 
+    const teamData = this.mode === "team" ? {
+      teamMode: true,
+      teamScores: this.getTeamScores(),
+    } : {}
     this.sendStatus(this.manager.id, STATUS.SHOW_LEADERBOARD, {
       oldLeaderboard: oldLeaderboard.slice(0, 5),
       leaderboard: this.leaderboard.slice(0, 5),
+      ...teamData,
     })
 
     this.tempOldLeaderboard = null

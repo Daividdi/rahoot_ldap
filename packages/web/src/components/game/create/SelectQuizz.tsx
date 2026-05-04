@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation"
 
 type Props = {
   quizzList: QuizzWithId[]
-  onSelect: (_id: string) => void
+  onSelect: (_id: string, _mode?: "classic" | "team") => void
   onListChange?: (_list: any[]) => void
   regionFilter?: "all" | "BR" | "MY"
 }
@@ -849,17 +849,17 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
             <SoloCard selected={selected} selectedQuiz={localList.find((q: any) => q.id === selected) || null} />
 
             {/* Team vs Team */}
-            <div className="flex flex-col rounded-xl border-2 border-gray-200 bg-white overflow-hidden opacity-55">
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+            <div className="flex flex-col rounded-xl border-2 border-orange-300 bg-white overflow-hidden shadow-sm">
+              <div className="bg-orange-50 px-4 py-3 border-b border-orange-200 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-base">⚔️</div>
-                  <span className="text-sm font-bold text-gray-700">Team vs Team</span>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 text-base">⚔️</div>
+                  <span className="text-sm font-bold text-gray-800">Team vs Team</span>
                 </div>
-                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">Soon</span>
+                <span className="rounded-full bg-orange-200 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-orange-700">New</span>
               </div>
               <div className="p-4 flex flex-col flex-1">
-                <p className="text-[11px] text-gray-500 leading-snug flex-1">Head-to-head teams with shared scores. In development.</p>
-                <button disabled className="mt-3 rounded-lg bg-gray-100 py-2 text-sm font-semibold text-gray-400 cursor-not-allowed">Coming soon</button>
+                <p className="text-[11px] text-gray-500 leading-snug flex-1">Players pick Team A or B. Scores balanced by team size — fairer with unequal groups.</p>
+                <Button onClick={() => onSelect(selected, "team")} className="mt-3 py-2 text-sm bg-orange-500 hover:bg-orange-600">Start Team vs Team</Button>
               </div>
             </div>
           </div>
