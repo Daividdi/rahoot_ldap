@@ -7,6 +7,7 @@ import XpBar from "@rahoot/web/components/profile/XpBar"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
 import { useSearchParams } from "next/navigation"
+import AvatarDisplay from "@rahoot/web/components/profile/AvatarDisplay"
 import Link from "next/link"
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
 
@@ -225,170 +226,166 @@ const PlayerHomeCard = () => {
   const monthlyRank = profile?.monthly?.rank ?? null
   const weeklyRank = profile?.weekly?.rank ?? null
 
+  const vrmPath = is3d ? (profile?.player?.avatar3d?.vrm ?? null) : null
+
   return (
-    <div className="card-3d z-10 flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-5">
-      {/* Header: avatar + name + tier */}
-      <div className="flex items-center gap-3">
-        <div className="relative shrink-0">
-          <Link
-            href="/avatar"
-            title="Change avatar"
-            className="group relative block h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow transition-transform hover:scale-105"
-          >
-            {effectiveAvatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={effectiveAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-primary/40">
-                {storedName.charAt(0).toUpperCase()}
-              </span>
-            )}
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-              </svg>
-            </div>
-          </Link>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-bold text-gray-800">{storedName}</p>
-          <div className="mt-1">
-            <TierBadge tier={tier} level={level} size="sm" />
-          </div>
-        </div>
+    <div className="card-3d z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white">
+
+      {/* ── Avatar stage (full-bleed, no padding) ───────────────────────────── */}
+      <div
+        className="relative shrink-0"
+        style={{ height: 290, background: "linear-gradient(180deg, #eef4f8 0%, #f8fafc 60%, #ffffff 100%)" }}
+      >
+        {/* Radial glow behind avatar */}
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(ellipse 60% 55% at 50% 70%, rgba(0,158,223,0.09) 0%, transparent 100%)" }} />
+        <AvatarDisplay
+          is3d={is3d}
+          vrmPath={vrmPath}
+          avatarUrl={is3d ? undefined : avatarUrl}
+          name={storedName}
+        />
+        {/* Not you? overlay */}
         <button
           onClick={() => { saveStoredName(""); setStoredName(""); setProfile(null) }}
-          className="shrink-0 text-[10px] text-gray-400 hover:text-primary hover:underline"
+          className="absolute right-3 top-3 rounded-full bg-white/75 px-2.5 py-1 text-[10px] font-semibold text-gray-400 shadow-sm backdrop-blur-sm transition-colors hover:bg-white hover:text-primary"
           title="Switch user"
         >
           Not you?
         </button>
       </div>
 
-      {/* XP bar */}
-      <div className="rounded-xl bg-gradient-to-b from-gray-50 to-white p-3 ring-1 ring-gray-100">
-        {profileLoading && !profile ? (
-          <div className="h-6 w-full animate-pulse rounded bg-gray-100" />
-        ) : (
-          <XpBar
-            level={level}
-            tier={tier}
-            xp={prog?.xp ?? 0}
-            xpIntoLevel={xpIntoLevel}
-            xpNeededForNext={xpNeededForNext}
-            pct={pct}
-          />
+      {/* ── Profile content ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-3.5 px-5 pb-5 pt-4">
+
+        {/* Name + Tier + Edit avatar */}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-lg font-bold text-gray-800">{storedName}</p>
+            <div className="mt-0.5"><TierBadge tier={tier} level={level} size="sm" /></div>
+          </div>
+          <Link
+            href="/avatar"
+            className="btn-action flex shrink-0 items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/15"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+            Edit avatar
+          </Link>
+        </div>
+
+        {/* XP bar */}
+        <div className="rounded-xl bg-gradient-to-b from-gray-50 to-white p-3 ring-1 ring-gray-100">
+          {profileLoading && !profile ? (
+            <div className="h-6 w-full animate-pulse rounded bg-gray-100" />
+          ) : (
+            <XpBar level={level} tier={tier} xp={prog?.xp ?? 0} xpIntoLevel={xpIntoLevel} xpNeededForNext={xpNeededForNext} pct={pct} />
+          )}
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-4 gap-2">
+          <Stat label="Games"    value={gamesPlayed} />
+          <Stat label="Perfect"  value={perfectGames} highlight={perfectGames > 0} />
+          <Stat label="Streak"   value={longestStreak} />
+          <Stat label="Accuracy" value={`${accuracy}%`} />
+        </div>
+
+        {/* Per-mode breakdown */}
+        {profile?.modeStats && (
+          <div className="grid grid-cols-3 gap-2">
+            <ModePill label="Classic" games={profile.modeStats.classic.games} points={profile.modeStats.classic.points} tone="primary" />
+            <ModePill label="Solo"    games={profile.modeStats.solo.games}    points={profile.modeStats.solo.points}    tone="emerald" />
+            <ModePill label="Team"    games={profile.modeStats.team.games}    points={profile.modeStats.team.points}    tone="gray" disabled />
+          </div>
         )}
-      </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-2">
-        <Stat label="Games"    value={gamesPlayed} />
-        <Stat label="Perfect"  value={perfectGames} highlight={perfectGames > 0} />
-        <Stat label="Streak"   value={longestStreak} />
-        <Stat label="Accuracy" value={`${accuracy}%`} />
-      </div>
-
-      {/* Per-mode breakdown */}
-      {profile?.modeStats && (
-        <div className="grid grid-cols-3 gap-2">
-          <ModePill label="Classic" games={profile.modeStats.classic.games} points={profile.modeStats.classic.points} tone="primary" />
-          <ModePill label="Solo"    games={profile.modeStats.solo.games}    points={profile.modeStats.solo.points}    tone="emerald" />
-          <ModePill label="Team"    games={profile.modeStats.team.games}    points={profile.modeStats.team.points}    tone="gray" disabled />
-        </div>
-      )}
-
-      {/* Rank strip — clicks through to /ranking */}
-      <Link
-        href="/ranking"
-        className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2 ring-1 ring-primary/10 transition hover:bg-primary/10 hover:ring-primary/30"
-      >
-        <div className="text-[11px] font-semibold text-primary/80">
-          {weeklyRank ? <>Week: <span className="font-bold">#{weeklyRank}</span></> : <>No weekly ranking</>}
-        </div>
-        <div className="text-[11px] font-semibold text-primary/80">
-          {monthlyRank ? <>Month: <span className="font-bold">#{monthlyRank}</span></> : <>No monthly ranking</>}
-        </div>
-        <div className="text-[11px] font-bold text-primary/70">View ranking →</div>
-      </Link>
-
-      {/* Badges shelf */}
-      {profile && profile.catalog && profile.catalog.length > 0 && (
-        <BadgeShelf earned={profile.badges} catalog={profile.catalog} />
-      )}
-
-      {/* Action: Enter PIN */}
-      {!pinMode ? (
-        <div className="flex flex-col gap-2.5">
-          {/* Primary CTA */}
-          <Button onClick={() => setPinMode(true)}>
-            <span className="flex items-center justify-center gap-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              Join a game
-            </span>
-          </Button>
-          {/* Secondary actions */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setExpanded(e => !e)}
-              className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-200"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              {expanded ? "Hide history" : "History"}
-            </button>
-            <Link
-              href="/avatar"
-              className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/15"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-              </svg>
-              Change avatar
-            </Link>
+        {/* Rank strip */}
+        <Link
+          href="/ranking"
+          className="flex items-center justify-between rounded-xl bg-primary/5 px-3 py-2.5 ring-1 ring-primary/10 transition hover:bg-primary/10 hover:ring-primary/30"
+        >
+          <div className="text-[11px] font-semibold text-primary/80">
+            {weeklyRank ? <>Week: <span className="font-bold">#{weeklyRank}</span></> : <>No weekly ranking</>}
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <Input
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            onKeyDown={onEnter(handleJoin)}
-            placeholder="Game code"
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <Button onClick={handleJoin} className="flex-1">Join</Button>
-            <button
-              onClick={() => { setPinMode(false); setPin("") }}
-              className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-400 hover:text-primary"
-            >
-              Cancel
-            </button>
+          <div className="text-[11px] font-semibold text-primary/80">
+            {monthlyRank ? <>Month: <span className="font-bold">#{monthlyRank}</span></> : <>No monthly ranking</>}
           </div>
-        </div>
-      )}
+          <div className="text-[11px] font-bold text-primary/70">Ranking →</div>
+        </Link>
 
-      {/* Expanded recent games */}
-      {expanded && profile && profile.recentSessions.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Recent games</p>
-          {profile.recentSessions.slice(0, 5).map(s => (
-            <div key={s.sessionId} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5">
-              <span className="shrink-0 text-[10px] text-gray-400">#{s.rank}</span>
-              <span className="flex-1 truncate text-xs font-semibold text-gray-700">{s.quizTitle}</span>
-              <span className="shrink-0 text-[10px] font-bold text-primary">+{s.xpGained} XP</span>
-              <span className="shrink-0 text-[10px] text-gray-400">{new Date(s.startedAt).toLocaleDateString("en-US")}</span>
+        {/* Badges shelf */}
+        {profile && profile.catalog && profile.catalog.length > 0 && (
+          <BadgeShelf earned={profile.badges} catalog={profile.catalog} />
+        )}
+
+        {/* Action: Enter PIN */}
+        {!pinMode ? (
+          <div className="flex flex-col gap-2.5">
+            <Button onClick={() => setPinMode(true)}>
+              <span className="flex items-center justify-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                Join a game
+              </span>
+            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-200"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                {expanded ? "Hide history" : "History"}
+              </button>
+              <Link
+                href="/ranking"
+                className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-200"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 20V10M12 20V4M6 20v-6"/>
+                </svg>
+                Rankings
+              </Link>
             </div>
-          ))}
-        </div>
-      )}
-      {expanded && profile && profile.recentSessions.length === 0 && (
-        <p className="text-center text-xs text-gray-400">Nenhum jogo ainda.</p>
-      )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <Input value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={onEnter(handleJoin)} placeholder="Game code" autoFocus />
+            <div className="flex gap-2">
+              <Button onClick={handleJoin} className="flex-1">Join</Button>
+              <button
+                onClick={() => { setPinMode(false); setPin("") }}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-400 hover:text-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Expanded recent games */}
+        {expanded && profile && profile.recentSessions.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Recent games</p>
+            {profile.recentSessions.slice(0, 5).map(s => (
+              <div key={s.sessionId} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5">
+                <span className="shrink-0 text-[10px] text-gray-400">#{s.rank}</span>
+                <span className="flex-1 truncate text-xs font-semibold text-gray-700">{s.quizTitle}</span>
+                <span className="shrink-0 text-[10px] font-bold text-primary">+{s.xpGained} XP</span>
+                <span className="shrink-0 text-[10px] text-gray-400">{new Date(s.startedAt).toLocaleDateString("en-US")}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {expanded && profile && profile.recentSessions.length === 0 && (
+          <p className="text-center text-xs text-gray-400">Nenhum jogo ainda.</p>
+        )}
+
+      </div>
     </div>
   )
 }

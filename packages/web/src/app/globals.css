@@ -399,3 +399,12 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
   box-shadow: none;
   transform: translateY(2px);
 }
+
+/* ── Avatar home card floating animation ───────────────────────────────────── */
+@keyframes avatar-home-float {
+  0%, 100% { transform: translateY(0px) scale(1); filter: drop-shadow(0 14px 28px rgba(0,0,0,0.13)); }
+  50%       { transform: translateY(-10px) scale(1.01); filter: drop-shadow(0 22px 40px rgba(0,0,0,0.18)); }
+}
+.avatar-home-float {
+  animation: avatar-home-float 4.5s ease-in-out infinite;
+}

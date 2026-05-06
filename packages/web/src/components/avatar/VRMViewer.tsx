@@ -11,6 +11,7 @@ type Props = {
   vrmUrl: string
   animationUrl?: string | null
   autoRotate?: boolean
+  interactive?: boolean
   className?: string
   background?: string
 }
@@ -19,6 +20,7 @@ export default function VRMViewer({
   vrmUrl,
   animationUrl = null,
   autoRotate = false,
+  interactive = true,
   className,
   background = "transparent",
 }: Props) {
@@ -53,16 +55,19 @@ export default function VRMViewer({
     if (background !== "transparent") scene.background = new THREE.Color(background)
     const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 50)
     camera.position.set(0, 1.4, 3)
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 1.0, 0)
-    controls.enableDamping = true
-    controls.minDistance = 0.8
-    controls.maxDistance = 8
-    controls.minPolarAngle = Math.PI / 6
-    controls.maxPolarAngle = Math.PI / 1.6
-    controls.autoRotate = autoRotate
-    controls.autoRotateSpeed = 1.2
-    controls.update()
+    let controls: OrbitControls | undefined
+    if (interactive) {
+      controls = new OrbitControls(camera, renderer.domElement)
+      controls.target.set(0, 1.0, 0)
+      controls.enableDamping = true
+      controls.minDistance = 0.8
+      controls.maxDistance = 8
+      controls.minPolarAngle = Math.PI / 6
+      controls.maxPolarAngle = Math.PI / 1.6
+      controls.autoRotate = autoRotate
+      controls.autoRotateSpeed = 1.2
+      controls.update()
+    }
 
     const key = new THREE.DirectionalLight(0xffffff, 2.2)
     key.position.set(1, 2, 1.5)
@@ -93,7 +98,7 @@ export default function VRMViewer({
       const dt = st.clock.getDelta()
       if (st.mixer) st.mixer.update(dt)
       if (st.vrm) st.vrm.update(dt)
-      if (st.controls) st.controls.update()
+      if (st.controls?.enableDamping) st.controls.update()
       if (st.renderer && st.scene && st.camera) st.renderer.render(st.scene, st.camera)
       st.raf = requestAnimationFrame(tick)
     }
@@ -104,7 +109,7 @@ export default function VRMViewer({
       window.removeEventListener("resize", onResize)
       ro.disconnect()
       if (st.raf) cancelAnimationFrame(st.raf)
-      if (st.controls) st.controls.dispose()
+      if (st.controls) { st.controls.dispose() }
       if (st.vrm) {
         VRMUtils.deepDispose(st.vrm.scene)
         st.scene?.remove(st.vrm.scene)
@@ -143,7 +148,7 @@ export default function VRMViewer({
         st.mixer = new THREE.AnimationMixer(vrm.scene)
 
         // Auto-fit camera to the loaded avatar: handles short/tall characters.
-        if (st.camera && st.controls) {
+        if (st.camera) {
           const box = new THREE.Box3().setFromObject(vrm.scene)
           const size = new THREE.Vector3()
           const center = new THREE.Vector3()
@@ -152,13 +157,17 @@ export default function VRMViewer({
 
           const fov = (st.camera.fov * Math.PI) / 180
           const distance = (size.y / 2) / Math.tan(fov / 2) * 1.35 + size.z * 0.5
-
           const targetY = center.y + size.y * 0.05
-          st.controls.target.set(center.x, targetY, center.z)
+
           st.camera.position.set(center.x, targetY, center.z + distance)
-          st.controls.minDistance = distance * 0.45
-          st.controls.maxDistance = distance * 3
-          st.controls.update()
+          if (st.controls) {
+            st.controls.target.set(center.x, targetY, center.z)
+            st.controls.minDistance = distance * 0.45
+            st.controls.maxDistance = distance * 3
+            st.controls.update()
+          } else {
+            st.camera.lookAt(center.x, targetY, center.z)
+          }
         }
       },
       undefined,
@@ -207,7 +216,7 @@ export default function VRMViewer({
   useEffect(() => {
     const st = stateRef.current
     if (st.controls) st.controls.autoRotate = autoRotate
-  }, [autoRotate])
+  }, [autoRotate, interactive])
 
   return <div ref={hostRef} className={className} />
 }
