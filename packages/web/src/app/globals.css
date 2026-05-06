@@ -346,3 +346,56 @@ html[data-theme="night"] .bg-gradient-angel {
 .bg-answer-green { background-color: #26890c; }
 
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* ── Auth loading animations ───────────────────────────────────────────────── */
+@keyframes auth-spin-cw {
+  to { transform: rotate(360deg); }
+}
+@keyframes auth-spin-ccw {
+  to { transform: rotate(-360deg); }
+}
+@keyframes auth-logo-float {
+  0%, 100% {
+    transform: translateY(0px);
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,0.35));
+  }
+  50% {
+    transform: translateY(-9px);
+    filter: drop-shadow(0 16px 28px rgba(0,0,0,0.5));
+  }
+}
+@keyframes auth-glow-breathe {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%       { opacity: 0.75; transform: scale(1.18); }
+}
+@keyframes auth-label-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%       { opacity: 1; }
+}
+.auth-spin-cw {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: auth-spin-cw 1.4s linear infinite;
+}
+.auth-spin-ccw {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: auth-spin-ccw 2s linear infinite;
+}
+.auth-logo-float { animation: auth-logo-float 3.2s ease-in-out infinite; }
+.auth-glow-breathe { animation: auth-glow-breathe 2.8s ease-in-out infinite; }
+.auth-label-pulse { animation: auth-label-pulse 2s ease-in-out infinite; }
+
+/* ── Secondary action buttons (PlayerHomeCard) ─────────────────────────────── */
+.btn-action {
+  box-shadow: 0 2px 0 rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.05);
+  transition: box-shadow 0.1s ease, transform 0.1s ease, background-color 0.15s ease;
+}
+.btn-action:hover {
+  box-shadow: 0 3px 0 rgba(0,0,0,0.1), inset 0 0 0 1px rgba(0,0,0,0.07);
+  transform: translateY(-1px);
+}
+.btn-action:active {
+  box-shadow: none;
+  transform: translateY(2px);
+}

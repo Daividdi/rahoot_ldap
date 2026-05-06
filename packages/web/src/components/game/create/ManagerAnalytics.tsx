@@ -3,14 +3,15 @@
 import clsx from "clsx"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import SelectQuizz from "@rahoot/web/components/game/create/SelectQuizz"
 import ManagerPlayers from "@rahoot/web/components/game/create/ManagerPlayers"
 import Image from "next/image"
 import logo from "@rahoot/web/assets/logo.svg"
 
-type Props = { quizzList: any[]; initialRegion?: "all" | "BR" | "MY"; onSelect?: (_id: string) => void; onListChange?: (newList: any[]) => void }
-type RFilter = "all" | "BR" | "MY"
+type Props = { quizzList: any[]; initialRegion?: "all" | "BR" | "MY" | "CN"; onSelect?: (_id: string) => void; onListChange?: (newList: any[]) => void }
+type RFilter = "all" | "BR" | "MY" | "CN"
 type PFilter = "all" | "month" | "week"
 type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team"
 
@@ -32,10 +33,11 @@ function safeGroup(quiz: any): string {
   return "Others"
 }
 
-function safeRegion(quiz: any): "BR" | "MY" {
+function safeRegion(quiz: any): "BR" | "MY" | "CN" {
   try {
     const r = (quiz?.region || "").toLowerCase()
     if (r.includes("my") || r.includes("malaysia")) return "MY"
+    if (r.includes("cn") || r.includes("china")) return "CN"
     if (r.includes("br") || r.includes("brazil")) return "BR"
     const s = (quiz?.subject || "").toLowerCase()
     const c = (quiz?.createdBy || "").toLowerCase()
@@ -78,7 +80,7 @@ function safeParseDate(d: string): Date | null {
 
 const Tag = ({ region }: { region: string }) => (
   <span className={clsx("inline-flex rounded-md px-2 py-0.5 text-xs font-semibold",
-    region === "BR" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800")}>{region}</span>
+    region === "BR" ? "bg-green-100 text-green-800" : region === "CN" ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800")}>{region}</span>
 )
 
 const GroupTag = ({ group }: { group: string }) => {
@@ -238,9 +240,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
 
   const regionStats = useMemo(() => {
     try {
-      const s = { BR: { q: 0, p: 0, c: 0, t: 0, time: 0 }, MY: { q: 0, p: 0, c: 0, t: 0, time: 0 } }
+      const s = { BR: { q: 0, p: 0, c: 0, t: 0, time: 0 }, MY: { q: 0, p: 0, c: 0, t: 0, time: 0 }, CN: { q: 0, p: 0, c: 0, t: 0, time: 0 } }
       data.forEach(q => {
-        const r = q.region === "MY" ? "MY" : "BR"
+        const r = q.region === "MY" ? "MY" : q.region === "CN" ? "CN" : "BR"
         s[r].q++
         s[r].time += q.questions.reduce((a: number, x: any) => a + (x?.time || 15) + (x?.cooldown || 5), 0)
         q.stats.forEach((p: any) => {
@@ -249,7 +251,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         })
       })
       return s
-    } catch { return { BR: { q: 0, p: 0, c: 0, t: 0, time: 0 }, MY: { q: 0, p: 0, c: 0, t: 0, time: 0 } } }
+    } catch { return { BR: { q: 0, p: 0, c: 0, t: 0, time: 0 }, MY: { q: 0, p: 0, c: 0, t: 0, time: 0 }, CN: { q: 0, p: 0, c: 0, t: 0, time: 0 } } }
   }, [data])
 
   const groupStats = useMemo(() => {
@@ -317,7 +319,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   }, [filtered, pFilter])
 
   const [minGames, setMinGames] = useState(2)
-  const [topPlayersRegion, setTopPlayersRegion] = useState<"all" | "BR" | "MY">("all")
+  const [topPlayersRegion, setTopPlayersRegion] = useState<"all" | "BR" | "MY" | "CN">("all")
   const [topMetric, setTopMetric] = useState<"avgPts" | "avgCorrect" | "games">("avgPts")
 
   const topPlayers = useMemo(() => {
@@ -416,9 +418,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     try {
       let wq = data.filter(q => q.playedDate && q.playedDate >= lbStartDate && q.playerCount > 0)
       if (rankingCats.length > 0) wq = wq.filter(q => rankingCats.includes(q.category))
-      const byR: Record<string, Record<string, { realName: string; games: number; pts: number; c: number; t: number; nicknames: Set<string> }>> = { BR: {}, MY: {} }
+      const byR: Record<string, Record<string, { realName: string; games: number; pts: number; c: number; t: number; nicknames: Set<string> }>> = { BR: {}, MY: {}, CN: {} }
       wq.forEach(q => {
-        const r = q.region === "MY" ? "MY" : "BR"
+        const r = q.region === "MY" ? "MY" : q.region === "CN" ? "CN" : "BR"
         q.stats.forEach((s: any) => {
           const key = s?.clientId || s?.realName || s?.username || s?.name || ""; if (!key) return
           const display = applyName(key, s?.realName || s?.username || s?.name || "")
@@ -432,7 +434,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         })
       })
       const result: Record<string, any[]> = {}
-      for (const region of ["BR", "MY"]) {
+      for (const region of ["BR", "MY", "CN"]) {
         const nm: Record<string, string> = {}; const mg: typeof byR["BR"] = {}
         Object.entries(byR[region]).forEach(([key, val]) => {
           const norm = val.realName.toLowerCase().trim()
@@ -444,7 +446,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           .filter(p => p.games >= minGames).sort((a, b) => b.totalPts - a.totalPts || b.avgPts - a.avgPts).slice(0, 10)
       }
       return result
-    } catch { return { BR: [], MY: [] } }
+    } catch { return { BR: [], MY: [], CN: [] } }
   }, [data, rankingCats, nameCorrections, applyName, minGames, lbStartDate])
 
   const weeklyTopByGroup = useMemo(() => {
@@ -489,8 +491,8 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
 
   const [participationDate, setParticipationDate] = useState<string>("")
   const [participationSort, setParticipationSort] = useState<"count" | "pts" | "name">("count")
-  const [participationRegion, setParticipationRegion] = useState<"all" | "BR" | "MY">("all")
-  useEffect(() => { if (activeView === "participation") setParticipationRegion(rFilter as "all" | "BR" | "MY") }, [rFilter, activeView])
+  const [participationRegion, setParticipationRegion] = useState<"all" | "BR" | "MY" | "CN">("all")
+  useEffect(() => { if (activeView === "participation") setParticipationRegion(rFilter as "all" | "BR" | "MY" | "CN") }, [rFilter, activeView])
 
   const dayParticipation = useMemo(() => {
     if (!participationDate) return []
@@ -591,6 +593,20 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           ))}
         </nav>
 
+        {/* Exit to player screen */}
+        <div className="shrink-0 border-t border-gray-100 px-2.5 py-3">
+          <Link
+            href="/"
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span className="truncate">Exit to player</span>
+          </Link>
+        </div>
 
       </aside>
 
@@ -600,9 +616,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         {activeView !== "team" && activeView !== "leaderboard" && (
           <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white flex-wrap">
             <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-1">Region</span>
-            {(["all","BR","MY"] as RFilter[]).map(r => (
+            {(["all","BR","MY","CN"] as RFilter[]).map(r => (
               <button key={r} onClick={() => setRFilter(r)} className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", rFilter === r ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
-                {r === "all" ? "All regions" : r === "BR" ? `BR (${regionStats.BR.q})` : `MY (${regionStats.MY.q})`}
+                {r === "all" ? "All regions" : r === "BR" ? `BR (${regionStats.BR.q})` : r === "MY" ? `MY (${regionStats.MY.q})` : `CN (${regionStats.CN.q})`}
               </button>
             ))}
             {activeView !== "quizzes" && (<>
@@ -798,7 +814,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                 <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">By Region</p>
                 <div className="flex gap-4">
-                  {(["BR","MY"] as const).map(reg => {
+                  {(["BR","MY","CN"] as const).map(reg => {
                     const rs = regionStats[reg]
                     const acc = rs.t > 0 ? Math.round(rs.c / rs.t * 100) : 0
                     return (
@@ -872,11 +888,11 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                       </button>
                     ))}
                   </div>
-                  {(["all", "BR", "MY"] as const).map(r => (
+                  {(["all", "BR", "MY", "CN"] as const).map(r => (
                     <button key={r} onClick={() => setTopPlayersRegion(r)}
                       className={clsx("rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
                         topPlayersRegion === r ? "bg-primary text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200")}>
-                      {r === "all" ? "All" : r === "BR" ? "🇧🇷 BR" : "🇲🇾 MY"}
+                      {r === "all" ? "All" : r === "BR" ? "🇧🇷 BR" : r === "MY" ? "🇲🇾 MY" : "🇨🇳 CN"}
                     </button>
                   ))}
                   <div className="flex items-center gap-1.5">
@@ -947,8 +963,8 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                     {allCategories.map(cat => <button key={cat} onClick={() => toggleRankingCat(cat)} className={clsx("rounded-full px-3 py-1.5 text-xs font-semibold transition-colors", rankingCats.includes(cat) ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>{cat}</button>)}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {(["BR", "MY"] as const).map(region => (
-                      <div key={region} className="rounded-xl border border-gray-100 overflow-hidden" style={{ borderTop: `3px solid ${region === "BR" ? "#16a34a" : "#2563eb"}` }}>
+                    {(["BR", "MY", "CN"] as const).map(region => (
+                      <div key={region} className="rounded-xl border border-gray-100 overflow-hidden" style={{ borderTop: `3px solid ${region === "BR" ? "#16a34a" : region === "MY" ? "#2563eb" : "#dc2626"}` }}>
                         <div className="px-4 py-2 flex items-center gap-2 bg-gray-50/60 border-b border-gray-100">
                           <Tag region={region}/><span className="text-sm font-semibold text-gray-700">Top 10</span><span className="ml-auto text-xs text-gray-400">Score · Avg</span>
                         </div>

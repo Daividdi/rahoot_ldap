@@ -12,7 +12,7 @@ type Props = {
   quizzList: QuizzWithId[]
   onSelect: (_id: string, _mode?: "classic" | "team") => void
   onListChange?: (_list: any[]) => void
-  regionFilter?: "all" | "BR" | "MY"
+  regionFilter?: "all" | "BR" | "MY" | "CN"
 }
 
 const SHAPE_STYLES = [
@@ -22,7 +22,7 @@ const SHAPE_STYLES = [
   { color: "var(--color-answer-green)", shape: "square" as const },
 ]
 
-const REGIONS = ["Brazil (BR)", "Malaysia (MY)", "Global (All teams)"]
+const REGIONS = ["Brazil (BR)", "Malaysia (MY)", "China (CN)", "Global (All teams)"]
 const CATEGORIES = ["General", "Tooth Anatomy", "Orthodontics", "Rule Refresh", "Weekly Review", "Quality Check", "Dental Anatomy", "Introduction", "Reinforcement", "Custom"]
 const GROUPS = ["ATP", "ATD", "Others"]
 const ANSWER_COLORS = ["bg-answer-red", "bg-answer-blue", "bg-answer-yellow", "bg-answer-green"]
@@ -253,6 +253,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
         const r = (q.region || "").toLowerCase()
         if (regionFilter === "BR" && !r.includes("br") && !r.includes("brazil")) return false
         if (regionFilter === "MY" && !r.includes("my") && !r.includes("malaysia")) return false
+        if (regionFilter === "CN" && !r.includes("cn") && !r.includes("china")) return false
       }
       const matchesSearch = !searchQuery || q.subject?.toLowerCase().includes(searchQuery.toLowerCase()) || q.createdBy?.toLowerCase().includes(searchQuery.toLowerCase())
       if (!matchesSearch) return false

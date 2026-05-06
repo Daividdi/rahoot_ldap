@@ -233,7 +233,7 @@ const PlayerHomeCard = () => {
           <Link
             href="/avatar"
             title="Change avatar"
-            className="block h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow transition hover:scale-105"
+            className="group relative block h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary/15 to-primary/5 shadow transition-transform hover:scale-105"
           >
             {effectiveAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -243,6 +243,11 @@ const PlayerHomeCard = () => {
                 {storedName.charAt(0).toUpperCase()}
               </span>
             )}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+              </svg>
+            </div>
           </Link>
         </div>
         <div className="min-w-0 flex-1">
@@ -314,20 +319,35 @@ const PlayerHomeCard = () => {
 
       {/* Action: Enter PIN */}
       {!pinMode ? (
-        <div className="flex flex-col gap-2">
-          <Button onClick={() => setPinMode(true)}>Join a game</Button>
-          <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2.5">
+          {/* Primary CTA */}
+          <Button onClick={() => setPinMode(true)}>
+            <span className="flex items-center justify-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              Join a game
+            </span>
+          </Button>
+          {/* Secondary actions */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setExpanded(e => !e)}
-              className="text-[11px] font-semibold text-gray-400 hover:text-primary"
+              className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2.5 text-[12px] font-semibold text-gray-600 hover:bg-gray-200"
             >
-              {expanded ? "Hide history" : "Recent games"}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {expanded ? "Hide history" : "History"}
             </button>
             <Link
               href="/avatar"
-              className="text-[11px] font-semibold text-gray-400 hover:text-primary"
+              className="btn-action flex items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-[12px] font-semibold text-primary hover:bg-primary/15"
             >
-              Change avatar →
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+              Change avatar
             </Link>
           </div>
         </div>

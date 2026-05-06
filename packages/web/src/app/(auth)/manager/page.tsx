@@ -4,7 +4,7 @@ import { QuizzWithId } from "@rahoot/common/types/game"
 import { STATUS } from "@rahoot/common/types/game/status"
 import ManagerPassword from "@rahoot/web/components/game/create/ManagerPassword"
 import ManagerDashboard from "@rahoot/web/components/game/create/ManagerDashboard"
-import Loader from "@rahoot/web/components/Loader"
+import AuthLoader from "@rahoot/web/components/AuthLoader"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useManagerStore } from "@rahoot/web/stores/manager"
 import { useRouter } from "next/navigation"
@@ -55,10 +55,9 @@ const Manager = () => {
 
   if (isCheckingAuth) {
     return (
-      <div className="flex flex-col items-center gap-4">
-        <Loader className="h-16" />
-        <p className="text-white/70 text-sm font-medium">Authenticating...</p>
-      </div>
+      <section className="bg-gradient-angel min-h-dvh flex flex-col items-center justify-center">
+        <AuthLoader label="Authenticating" />
+      </section>
     )
   }
 

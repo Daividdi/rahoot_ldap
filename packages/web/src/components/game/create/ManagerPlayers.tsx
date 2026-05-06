@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation"
 
 type Props = {
   quizzList: any[]
-  regionFilter?: "all" | "BR" | "MY"
+  regionFilter?: "all" | "BR" | "MY" | "CN"
 }
 
-const safeRegion = (q: any): "BR" | "MY" => {
+const safeRegion = (q: any): "BR" | "MY" | "CN" => {
   const r = (q?.region || "").toLowerCase()
   if (r.includes("my") || r.includes("malaysia")) return "MY"
+  if (r.includes("cn") || r.includes("china")) return "CN"
   const s = (q?.subject || "").toLowerCase()
   const c = (q?.createdBy || "").toLowerCase()
   if (["rule refresh", "my ", "malaysia"].some(k => s.includes(k)) ||
