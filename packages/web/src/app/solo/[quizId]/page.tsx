@@ -8,7 +8,8 @@ import { useParams, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import clsx from "clsx"
 
-const REAL_NAME_KEY = "rahoot_real_name"
+const REAL_NAME_KEY = "rahoot_v2_name"
+const KEEP_KEY = "rahoot_keep_logged"
 
 type SoloQuestion = {
   question: string
@@ -62,7 +63,11 @@ export default function SoloGamePage() {
 
   const [realName, setRealName] = useState<string>("")
   const [needName, setNeedName] = useState(false)
-  const [registerInput, setRegisterInput] = useState("")
+  const [ldapUser, setLdapUser]         = useState("")
+  const [ldapPass, setLdapPass]         = useState("")
+  const [keepLoggedIn, setKeepLoggedIn] = useState(false)
+  const [authLoading, setAuthLoading]   = useState(false)
+  const [authError, setAuthError]       = useState("")
 
   const [resp, setResp] = useState<SoloQuizResp | null>(null)
   const [stage, setStage] = useState<"loading" | "ready" | "playing" | "done" | "error">("loading")
@@ -92,17 +97,15 @@ export default function SoloGamePage() {
 
   useEffect(() => {
     try {
-      const urlName = searchParams.get("u") || searchParams.get("name") || ""
-      const stored = localStorage.getItem(REAL_NAME_KEY) || ""
-      const effective = (urlName || stored).trim()
-      if (effective) {
-        setRealName(effective)
-        if (urlName && urlName !== stored) {
-          localStorage.setItem(REAL_NAME_KEY, effective)
-        }
-      } else {
-        setNeedName(true)
+      const urlName = (searchParams.get("u") || searchParams.get("name") || "").trim()
+      if (urlName) { setRealName(urlName); return }
+      const session = sessionStorage.getItem(REAL_NAME_KEY)
+      if (session) { setRealName(session); return }
+      if (localStorage.getItem(KEEP_KEY) === "1") {
+        const local = localStorage.getItem(REAL_NAME_KEY)
+        if (local) { setRealName(local); return }
       }
+      setNeedName(true)
     } catch {
       setNeedName(true)
     }
@@ -206,30 +209,84 @@ export default function SoloGamePage() {
     setStage("playing")
   }
 
-  const handleRegisterName = () => {
-    const n = registerInput.trim()
-    if (!n) return
-    try { localStorage.setItem(REAL_NAME_KEY, n) } catch {}
-    setRealName(n)
-    setNeedName(false)
-  }
-
   // ── Rendering ─────────────────────────────────────────────
   if (needName) {
+    const handleLdapAuth = () => {
+      if (!ldapUser.trim() || !ldapPass.trim()) return
+      if (!socket || !isConnected) { setAuthError("Not connected — please wait and try again."); return }
+      setAuthLoading(true)
+      setAuthError("")
+      ;(socket as any).timeout(12000).emit(
+        "player:ldapAuth",
+        { username: ldapUser.trim(), password: ldapPass },
+        (err: any, result: any) => {
+          setAuthLoading(false)
+          if (err) { setAuthError("Request timed out. Check your connection."); return }
+          if (result?.ok) {
+            try {
+              sessionStorage.setItem(REAL_NAME_KEY, result.fullName)
+              if (keepLoggedIn) {
+                localStorage.setItem(REAL_NAME_KEY, result.fullName)
+                localStorage.setItem(KEEP_KEY, "1")
+              } else {
+                localStorage.removeItem(REAL_NAME_KEY)
+                localStorage.removeItem(KEEP_KEY)
+              }
+            } catch {}
+            setRealName(result.fullName)
+            setNeedName(false)
+          } else {
+            setAuthError(result?.error || "Authentication failed")
+            setLdapPass("")
+          }
+        }
+      )
+    }
+    const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter") handleLdapAuth() }
     return (
       <Shell>
         <div className="flex flex-col gap-3">
-          <h2 className="text-lg font-bold text-gray-800">Who are you?</h2>
-          <p className="text-sm text-gray-500">To save your progress and limit attempts.</p>
-          <Input
-            value={registerInput}
-            onChange={e => setRegisterInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleRegisterName()}
-            placeholder="Your full name"
-            maxLength={40}
-            autoFocus
-          />
-          <Button onClick={handleRegisterName}>Start</Button>
+          <div>
+            <h2 className="text-lg font-bold text-gray-800">Sign in</h2>
+            <p className="text-sm text-gray-400">Use your network credentials to continue.</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Input
+              value={ldapUser}
+              onChange={e => setLdapUser(e.target.value)}
+              onKeyDown={onEnter}
+              placeholder="Username"
+              maxLength={40}
+              autoFocus
+              disabled={authLoading}
+            />
+            <input
+              type="password"
+              value={ldapPass}
+              onChange={e => setLdapPass(e.target.value)}
+              onKeyDown={onEnter}
+              placeholder="Password"
+              maxLength={80}
+              disabled={authLoading}
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            />
+            <label className="flex cursor-pointer items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={keepLoggedIn}
+                onChange={e => setKeepLoggedIn(e.target.checked)}
+                disabled={authLoading}
+                className="h-4 w-4 rounded border-gray-300 accent-primary"
+              />
+              <span className="text-xs text-gray-500">Keep me signed in</span>
+            </label>
+          </div>
+          {authError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{authError}</p>
+          )}
+          <Button onClick={handleLdapAuth} disabled={authLoading}>
+            {authLoading ? "Signing in…" : "Continue"}
+          </Button>
         </div>
       </Shell>
     )
