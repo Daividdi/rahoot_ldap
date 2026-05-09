@@ -1,4 +1,5 @@
 "use client"
+import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
 
 import { Player } from "@rahoot/common/types/game"
 import { ManagerStatusDataMap } from "@rahoot/common/types/game/status"
@@ -126,18 +127,13 @@ const Room = ({ data: { text, inviteCode } }: Props) => {
               </div>
 
               {/* Name card */}
-              <div className="rounded-lg bg-primary px-3 py-1.5 shadow-md">
-                <span className="text-sm font-bold text-white drop-shadow-md group-hover:line-through">
-                  {player.username}
+              <div className="rounded-lg bg-primary px-3 py-1.5 shadow-md max-w-[7rem]">
+                <span className="text-sm font-bold text-white drop-shadow-md group-hover:line-through break-words leading-tight">
+                  {abbreviateName(player.username || "")}
                   {p.team && (
                     <span className={"ml-1 text-xs font-black " + (p.team === "A" ? "text-blue-300" : "text-red-300")}>{p.team}</span>
                   )}
                 </span>
-                {p.realName && p.realName !== player.username && (
-                  <span className="block text-center text-[10px] font-medium text-white/50">
-                    {p.realName}
-                  </span>
-                )}
               </div>
             </div>
           )

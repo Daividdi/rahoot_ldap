@@ -14,6 +14,7 @@ import { getProfile } from "@rahoot/socket/services/profile"
 import { getSoloQuizFor, submitSoloAttempt } from "@rahoot/socket/services/soloMode"
 import { snapshotClosedWeeks, getAllLeaderboards } from "@rahoot/socket/services/leaderboards"
 import { listAvatars, saveAvatarSelection } from "@rahoot/socket/services/avatars3d"
+import { ldapAuthenticate } from "@rahoot/socket/services/ldap"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -454,6 +455,24 @@ io.on("connection", (socket) => {
       socket.emit("game:fullResults" as any, cached);
     }
   });
+
+
+  socket.on("player:ldapAuth", async ({ username, password }, callback) => {
+    if (typeof callback !== "function") return
+    if (!username || !password) { callback({ ok: false, error: "Username and password required" }); return }
+    try {
+      const result = await ldapAuthenticate(String(username).trim(), String(password))
+      if (result.ok) {
+        try {
+          const { db: _db } = require("@rahoot/socket/services/db")
+          _db().prepare("INSERT OR IGNORE INTO ldap_players (real_name) VALUES (?)").run(result.fullName)
+        } catch {}
+      }
+      callback(result)
+    } catch (err) {
+      callback({ ok: false, error: "Authentication error" })
+    }
+  })
 
   socket.on("disconnect", () => {
     console.log(`A user disconnected : ${socket.id}`)

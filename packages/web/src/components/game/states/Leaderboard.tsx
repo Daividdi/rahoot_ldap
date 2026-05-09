@@ -1,4 +1,5 @@
 "use client"
+import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
 import React, { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "motion/react"
 import clsx from "clsx"
@@ -151,17 +152,14 @@ const Leaderboard = ({ data, isFinal = false }: any) => {
 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
-                  <div className={clsx("flex items-center gap-2 truncate", rank === 0 ? "text-2xl" : rank < 3 ? "text-xl" : "text-lg")}>
-                    {player.username || player.name}
+                  <div className={clsx("flex items-center gap-2", rank === 0 ? "text-2xl" : rank < 3 ? "text-xl" : "text-lg")}>
+                    <span className="break-words leading-tight">{abbreviateName(player.username || player.name || "")}</span>
                     {(player as any).team && (
                       <span className={clsx("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black",
                         (player as any).team === "A" ? "bg-blue-400/30 text-blue-200" : "bg-red-400/30 text-red-200"
                       )}>{(player as any).team}</span>
                     )}
                   </div>
-                  {(player as any).realName && (player as any).realName !== (player.username || player.name) && (
-                    <div className="text-xs text-white/40 truncate">{(player as any).realName}</div>
-                  )}
                 </div>
 
                 {/* Points */}

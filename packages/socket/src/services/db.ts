@@ -277,6 +277,11 @@ function ensureAvatarKindColumns(): void {
   }
 }
 
+
+function ensureLdapPlayersTable(): void {
+  _db!.exec("CREATE TABLE IF NOT EXISTS ldap_players (real_name TEXT PRIMARY KEY)")
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export const Database = {
@@ -289,7 +294,7 @@ export const Database = {
     _db.exec("PRAGMA journal_mode = WAL")
     _db.exec("PRAGMA foreign_keys = ON")
     _db.exec(SCHEMA_SQL)
-    console.log("[db] schema ready"); ensureAvatarKindColumns()
+    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable()
 
     if (!isMigrated()) {
       console.log("[db] migrating history.json …")

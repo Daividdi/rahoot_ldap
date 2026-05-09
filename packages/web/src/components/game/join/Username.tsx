@@ -8,8 +8,10 @@ import { usePlayerStore } from "@rahoot/web/stores/player"
 import { useRouter } from "next/navigation"
 import { KeyboardEvent, useEffect, useState, useCallback } from "react"
 import clsx from "clsx"
+import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
 
-const STORAGE_KEY = "rahoot_real_name"
+const STORAGE_KEY = "rahoot_v2_name"
+const KEEP_KEY    = "rahoot_keep_logged"
 const AVATAR_KEY = "rahoot_avatar_cfg"
 const FAV_3D_KEY = "rahoot_avatar_3d_id"
 
@@ -89,8 +91,20 @@ const buildAvatarUrl = (seed: string, skin: string, hair: string, hairColor: str
   return url
 }
 
-const getStoredRealName = (): string => { try { return localStorage.getItem(STORAGE_KEY) || "" } catch { return "" } }
-const saveRealName = (name: string) => { try { localStorage.setItem(STORAGE_KEY, name) } catch {} }
+function getStoredRealName(): string {
+  try {
+    const s = sessionStorage.getItem(STORAGE_KEY)
+    if (s) return s
+    if (localStorage.getItem(KEEP_KEY) === "1") return localStorage.getItem(STORAGE_KEY) || ""
+    return ""
+  } catch { return "" }
+}
+function saveRealName(name: string): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, name)
+    if (localStorage.getItem(KEEP_KEY) === "1") localStorage.setItem(STORAGE_KEY, name)
+  } catch {}
+}
 const getStoredAvatar = (): string => { try { return localStorage.getItem(AVATAR_KEY) || "" } catch { return "" } }
 const saveAvatarCfg = (data: string) => { try { localStorage.setItem(AVATAR_KEY, data) } catch {} }
 
@@ -118,6 +132,11 @@ const Username = () => {
   const [useAvatar, setUseAvatar] = useState(true)
   const [active3dId, setActive3dId] = useState<string | null>(null)
   const [avatarMode, setAvatarMode] = useState<"3d" | "classic">("classic")
+  const [ldapUser, setLdapUser]   = useState("")
+  const [ldapPass, setLdapPass]   = useState("")
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState("")
+
   const [mainTab, setMainTab]   = useState<"avatar" | "history">("avatar")
   const [historyData, setHistoryData] = useState<{ history: any[]; leaderboard: any[] } | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -171,9 +190,25 @@ const Username = () => {
     setAccessory(randomItem(["none", "none", "none", "glasses", "sunglasses", "catEars", "sailormoonCrown", "mustache"]))
   }, [])
 
-  const handleRegister = () => {
-    if (!realName.trim()) return
-    saveRealName(realName.trim()); setStoredName(realName.trim()); setNickname(realName.trim()); setStep("play")
+  const handleLdapAuth = () => {
+    if (!ldapUser.trim() || !ldapPass.trim()) return
+    if (!socket) { setAuthError("Not connected. Please refresh."); return }
+    setAuthLoading(true)
+    setAuthError("")
+    ;(socket as any)?.emit("player:ldapAuth", { username: ldapUser.trim(), password: ldapPass }, (result: any) => {
+      setAuthLoading(false)
+      if (result?.ok) {
+        const abbr = abbreviateName(result.fullName)
+        saveRealName(result.fullName)
+        setStoredName(result.fullName)
+        setRealName(result.fullName)
+        setNickname(abbr)
+        setStep("play")
+      } else {
+        setAuthError(result?.error || "Authentication failed")
+        setLdapPass("")
+      }
+    })
   }
 
   const handleLogin = () => {
@@ -223,16 +258,9 @@ const Username = () => {
   if (step === "loading") return null
 
   if (step === "register") {
-    return (
-      <div className="card-3d z-10 flex w-full max-w-xs flex-col gap-3 rounded-xl bg-white p-5">
-        <div>
-          <h2 className="text-lg font-bold text-gray-800">First, identify yourself</h2>
-          <p className="text-sm text-gray-400">Enter your full name. This will be saved on this device.</p>
-        </div>
-        <Input value={realName} onChange={(e) => setRealName(e.target.value)} onKeyDown={handleKeyDown(handleRegister)} placeholder="Your full name" maxLength={40} autoFocus />
-        <Button onClick={handleRegister}>Continue</Button>
-      </div>
-    )
+    // No stored identity — send back to home page to sign in
+    router.replace("/")
+    return null
   }
 
   return (
@@ -261,7 +289,7 @@ const Username = () => {
           </div>
           <p className="text-sm font-semibold text-gray-700">{storedName}</p>
         </div>
-        <button onClick={() => { setStep("register"); setRealName("") }} className="text-[10px] text-primary hover:underline">Not you?</button>
+        <button onClick={() => { setStep("register"); setRealName(""); setLdapUser(""); setLdapPass(""); setAuthError("") }} className="text-[10px] text-primary hover:underline">Not you?</button>
       </div>
 
       {/* Avatar section */}
@@ -433,14 +461,7 @@ const Username = () => {
 
       {/* ── Avatar tab ─────────────────────────────────────────── */}
       {mainTab === "avatar" && (
-        <>
-          {/* Nickname input */}
-          <div>
-            <label className="mb-1 block text-[11px] font-semibold text-gray-400">Nickname</label>
-            <Input value={nickname} onChange={(e) => setNickname(e.target.value)} onKeyDown={handleKeyDown(handleLogin)} placeholder="Choose a nickname" maxLength={20} autoFocus />
-          </div>
-          <Button onClick={handleLogin}>Let&apos;s Go!</Button>
-        </>
+        <Button onClick={handleLogin}>Let&apos;s Go!</Button>
       )}
 
       {/* ── History tab ─────────────────────────────────────────── */}

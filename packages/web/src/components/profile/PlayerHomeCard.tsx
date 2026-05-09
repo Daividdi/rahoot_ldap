@@ -1,4 +1,5 @@
 "use client"
+import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
 
 import Button from "@rahoot/web/components/Button"
 import Input from "@rahoot/web/components/Input"
@@ -11,8 +12,9 @@ import AvatarDisplay from "@rahoot/web/components/profile/AvatarDisplay"
 import Link from "next/link"
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
 
-const STORAGE_KEY = "rahoot_real_name"
-const AVATAR_KEY = "rahoot_avatar_cfg"
+const STORAGE_KEY = "rahoot_v2_name"
+const KEEP_KEY    = "rahoot_keep_logged"
+const AVATAR_KEY  = "rahoot_avatar_cfg"
 
 type TierId = "bronze" | "silver" | "gold" | "platinum" | "mythic"
 
@@ -57,8 +59,28 @@ type ProfilePayload = {
   catalog: Array<{ id: string; label: string; description: string; emoji: string; category: string }>
 }
 
-const getStoredName = (): string => { try { return localStorage.getItem(STORAGE_KEY) || "" } catch { return "" } }
-const saveStoredName = (n: string) => { try { localStorage.setItem(STORAGE_KEY, n) } catch {} }
+function getStoredName(): string {
+  try {
+    const s = sessionStorage.getItem(STORAGE_KEY)
+    if (s) return s
+    if (localStorage.getItem(KEEP_KEY) === "1") return localStorage.getItem(STORAGE_KEY) || ""
+    return ""
+  } catch { return "" }
+}
+function saveStoredName(name: string, keep: boolean): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, name)
+    if (keep) { localStorage.setItem(STORAGE_KEY, name); localStorage.setItem(KEEP_KEY, "1") }
+    else       { localStorage.removeItem(STORAGE_KEY);    localStorage.removeItem(KEEP_KEY) }
+  } catch {}
+}
+function clearStoredName(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(KEEP_KEY)
+  } catch {}
+}
 
 type AvatarCfg = {
   seed?: string; skin?: string; hair?: string; hairColor?: string
@@ -120,6 +142,11 @@ const PlayerHomeCard = () => {
   const [expanded, setExpanded] = useState(false)  // show recent games
 
   const [avatarUrl, setAvatarUrl] = useState("")
+  const [ldapUser, setLdapUser]       = useState("")
+  const [ldapPass, setLdapPass]       = useState("")
+  const [keepLoggedIn, setKeepLoggedIn] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError]     = useState("")
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -161,7 +188,7 @@ const PlayerHomeCard = () => {
   const handleRegister = useCallback(() => {
     const n = registerName.trim()
     if (!n) return
-    saveStoredName(n)
+    saveStoredName(n, false)
     setStoredName(n)
   }, [registerName])
 
@@ -180,23 +207,71 @@ const PlayerHomeCard = () => {
     return <div className="card-3d z-10 h-40 w-full max-w-sm rounded-2xl bg-white/60 animate-pulse" />
   }
 
-  // ── First-time user: register name ────────────────────────
+  // ── First-time user: LDAP login ───────────────────────────
   if (!storedName) {
+    const handleLdapAuth = () => {
+      if (!ldapUser.trim() || !ldapPass.trim()) return
+      if (!socket || !isConnected) { setAuthError("Not connected — please wait and try again."); return }
+      setAuthLoading(true)
+      setAuthError("")
+      ;(socket as any).timeout(12000).emit("player:ldapAuth", { username: ldapUser.trim(), password: ldapPass },
+        (err: any, result: any) => {
+          setAuthLoading(false)
+          if (err) { setAuthError("Request timed out. Check your connection."); return }
+          if (result?.ok) {
+            saveStoredName(result.fullName, keepLoggedIn)
+            setStoredName(result.fullName)
+            setAvatarUrl(getStoredAvatarUrl())
+          } else {
+            setAuthError(result?.error || "Authentication failed")
+            setLdapPass("")
+          }
+        }
+      )
+    }
     return (
       <div className="card-3d z-10 flex w-full max-w-sm flex-col gap-4 rounded-2xl bg-white p-6">
         <div>
           <h2 className="text-lg font-bold text-gray-800">Welcome!</h2>
-          <p className="text-sm text-gray-400">Tell us your name to save your progress.</p>
+          <p className="text-sm text-gray-400">Sign in with your network credentials.</p>
         </div>
-        <Input
-          value={registerName}
-          onChange={(e) => setRegisterName(e.target.value)}
-          onKeyDown={onEnter(handleRegister)}
-          placeholder="Your full name"
-          maxLength={40}
-          autoFocus
-        />
-        <Button onClick={handleRegister}>Continue</Button>
+        <div className="flex flex-col gap-2">
+          <Input
+            value={ldapUser}
+            onChange={(e) => setLdapUser(e.target.value)}
+            onKeyDown={onEnter(handleLdapAuth)}
+            placeholder="Username"
+            maxLength={40}
+            autoFocus
+            disabled={authLoading}
+          />
+          <input
+            type="password"
+            value={ldapPass}
+            onChange={(e) => setLdapPass(e.target.value)}
+            onKeyDown={onEnter(handleLdapAuth)}
+            placeholder="Password"
+            maxLength={80}
+            disabled={authLoading}
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+          />
+          <label className="flex cursor-pointer items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              checked={keepLoggedIn}
+              onChange={e => setKeepLoggedIn(e.target.checked)}
+              disabled={authLoading}
+              className="h-4 w-4 rounded border-gray-300 text-primary accent-primary"
+            />
+            <span className="text-xs text-gray-500">Keep me signed in</span>
+          </label>
+        </div>
+        {authError && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{authError}</p>
+        )}
+        <Button onClick={handleLdapAuth} disabled={authLoading}>
+          {authLoading ? "Signing in…" : "Continue"}
+        </Button>
       </div>
     )
   }
@@ -247,7 +322,7 @@ const PlayerHomeCard = () => {
         />
         {/* Not you? overlay */}
         <button
-          onClick={() => { saveStoredName(""); setStoredName(""); setProfile(null) }}
+          onClick={() => { clearStoredName(); setStoredName(""); setProfile(null); setLdapUser(""); setLdapPass(""); setAuthError(""); setKeepLoggedIn(false) }}
           className="absolute right-3 top-3 rounded-full bg-white/75 px-2.5 py-1 text-[10px] font-semibold text-gray-400 shadow-sm backdrop-blur-sm transition-colors hover:bg-white hover:text-primary"
           title="Switch user"
         >
@@ -261,7 +336,7 @@ const PlayerHomeCard = () => {
         {/* Name + Tier + Edit avatar */}
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-bold text-gray-800">{storedName}</p>
+            <p className="truncate text-lg font-bold text-gray-800">{abbreviateName(storedName)}</p>
             <div className="mt-0.5"><TierBadge tier={tier} level={level} size="sm" /></div>
           </div>
           <Link

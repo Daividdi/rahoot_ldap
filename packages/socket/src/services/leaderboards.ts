@@ -85,11 +85,9 @@ function periodLeaderboard(
          FROM session_players sp
          JOIN sessions s ON s.id = sp.session_id
          JOIN players  p ON p.id = sp.player_id
+         JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
-          AND LOWER(p.real_name) NOT LIKE '%daividdi%'
-          AND LOWER(p.real_name) NOT LIKE '%test user%'
-          AND p.real_name NOT GLOB '[0-9][0-9][0-9][0-9]*'
         GROUP BY sp.player_id
         ${orderClause}
         LIMIT ?`
@@ -200,10 +198,8 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
             p.real_name AS realName
        FROM weekly_snapshots ws
        JOIN players p ON p.id = ws.player_id
-      WHERE ws.week_iso = ? AND ws.rank <= 3
-        AND LOWER(p.real_name) NOT LIKE '%daividdi%'
-        AND LOWER(p.real_name) NOT LIKE '%test user%'
-        AND p.real_name NOT GLOB '[0-9][0-9][0-9][0-9]*'
+       JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+      WHERE ws.week_iso = ? AND ws.rank <= 3'
       ORDER BY ws.rank ASC`
   )
   for (const { w } of weeks) {

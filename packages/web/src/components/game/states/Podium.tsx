@@ -1,4 +1,5 @@
 "use client"
+import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
 
 import { ManagerStatusDataMap } from "@rahoot/common/types/game/status"
 import useScreenSize from "@rahoot/web/hooks/useScreenSize"
@@ -292,9 +293,9 @@ const Podium = ({ data: { subject, top, questions } }: Props) => {
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={apparition >= (isFirst ? 5 : showAt) ? { opacity: 1 } : { opacity: 0 }}
-                  className={clsx("overflow-visible text-center font-bold whitespace-nowrap text-white drop-shadow-lg", isFirst ? "text-2xl md:text-3xl" : "text-xl md:text-2xl")}
+                  className={clsx("text-center font-bold text-white drop-shadow-lg leading-tight", isFirst ? "text-2xl md:text-3xl" : "text-xl md:text-2xl")}
                 >
-                  {player.username}
+                  {abbreviateName(player.username || "")}
                 </motion.p>
 
                 <div className={clsx("flex h-full w-full flex-col items-center gap-3 rounded-t-xl pt-4 text-center shadow-2xl bg-gradient-to-b", podiumColors[playerIdx])}>

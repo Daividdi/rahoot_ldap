@@ -15,7 +15,7 @@ type RFilter = "all" | "BR" | "MY" | "CN"
 type PFilter = "all" | "month" | "week"
 type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team"
 
-const EXCLUDED_PLAYERS = ["test user", "daividdi"]
+const EXCLUDED_PLAYERS = ["test user"]
 const isExcluded = (name: string) => {
   const lower = name.toLowerCase().trim()
   return EXCLUDED_PLAYERS.some(ex => lower === ex || lower.includes(ex))
