@@ -219,7 +219,7 @@ export default function SoloGamePage() {
     return (
       <Shell>
         <div className="flex flex-col gap-3">
-          <h2 className="text-lg font-bold text-gray-800">Identifique-se</h2>
+          <h2 className="text-lg font-bold text-gray-800">Who are you?</h2>
           <p className="text-sm text-gray-500">To save your progress and limit attempts.</p>
           <Input
             value={registerInput}
