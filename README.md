@@ -75,6 +75,75 @@ cp .env.example .env
 
 ---
 
+
+---
+
+## LDAP / Active Directory Authentication
+
+Players must log in with their **network (Windows) credentials** before joining a game.
+The app fetches their `displayName` from AD and uses it everywhere — game room, rankings, leaderboard.
+
+### Environment variables
+
+Add these to your `.env` file alongside `docker-compose.yml`:
+
+| Variable | Example | Description |
+|---|---|---|
+| `LDAP_URL` | `ldap://192.168.1.10:389` | IP or hostname of your AD/LDAP server |
+| `LDAP_DOMAIN` | `company.local` | Domain suffix appended to the login username |
+| `LDAP_SEARCH_BASE` | `DC=company,DC=local` | Base DN used when searching for users |
+| `LDAP_SERVICE_USER` | `svc.rahoot@company.local` | *(optional)* Read-only service account |
+| `LDAP_SERVICE_PASS` | `yourpassword` | *(optional)* Password for the service account |
+
+**Full `.env` example:**
+
+```env
+WEB_ORIGIN=http://rahoot.example.com
+SOCKET_URL=http://rahoot.example.com
+TZ=America/Sao_Paulo
+
+LDAP_URL=ldap://192.168.1.10:389
+LDAP_DOMAIN=company.local
+LDAP_SEARCH_BASE=DC=company,DC=local
+LDAP_SERVICE_USER=
+LDAP_SERVICE_PASS=
+```
+
+### Service account (optional)
+
+After a user authenticates, the app searches AD for their `displayName`.
+In most AD environments an authenticated user can already read their own record, so
+`LDAP_SERVICE_USER` and `LDAP_SERVICE_PASS` can be **left empty**.
+
+Fill them in only if your AD policy restricts self-search — any **read-only** account works, no write permissions needed.
+
+### Nginx — socket proxy
+
+Socket.io must be proxied through nginx on port 80 (direct port access is typically blocked by firewalls).
+Add a `/socket.io/` location block to your nginx config:
+
+```nginx
+location /socket.io/ {
+    proxy_pass         http://127.0.0.1:3002/socket.io/;
+    proxy_http_version 1.1;
+    proxy_set_header   Upgrade           $http_upgrade;
+    proxy_set_header   Connection        "upgrade";
+    proxy_set_header   Host              $host;
+    proxy_read_timeout 86400;
+}
+```
+
+Set `SOCKET_URL` to your domain **without** a port suffix so the browser connects through nginx:
+
+```env
+SOCKET_URL=http://rahoot.example.com
+```
+
+### Rankings
+
+Only players who have authenticated via LDAP appear in the rankings.
+Legacy entries from before LDAP was enforced are automatically excluded.
+
 ## Configuration files
 
 All runtime data lives in `../config/` (one level above the repo, created by `deploy.sh`):
