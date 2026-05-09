@@ -118,10 +118,10 @@ export default function SoloGamePage() {
       if (!data.ok) {
         setStage("error")
         setError(
-          data.reason === "not_found" ? "Quiz não encontrado."
+          data.reason === "not_found" ? "Quiz not found."
             : data.reason === "no_attempts_left" ? "You've already used all attempts for this quiz."
-            : data.reason === "solo_disabled" ? "Este quiz não permite modo solo."
-            : "Erro ao carregar quiz."
+            : data.reason === "solo_disabled" ? "This quiz does not allow solo mode."
+            : "Error loading quiz."
         )
       } else {
         setStage("ready")
@@ -249,13 +249,13 @@ export default function SoloGamePage() {
       <Shell>
         <div className="flex flex-col gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Modo Solo</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Solo Mode</p>
             <h2 className="text-lg font-bold text-gray-800">{resp.quiz.subject}</h2>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Questions" value={resp.quiz.questions.length} />
-            <Stat label="Tempo" value={`${resp.quiz.questions.reduce((s, q) => s + q.time, 0)}s`} />
-            <Stat label="Tentativas" value={`${remaining}/${resp.maxAttempts}`} highlight={remaining > 0} />
+            <Stat label="Time" value={`${resp.quiz.questions.reduce((s, q) => s + q.time, 0)}s`} />
+            <Stat label="Attempts" value={`${remaining}/${resp.maxAttempts}`} highlight={remaining > 0} />
           </div>
           <p className="text-[11px] text-gray-500">
             You have <span className="font-bold">{remaining}</span> {remaining === 1 ? "attempt" : "attempts"} remaining for this quiz.
@@ -273,7 +273,7 @@ export default function SoloGamePage() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
-              Questão {qIndex + 1} / {totalQuestions}
+              Question {qIndex + 1} / {totalQuestions}
             </span>
             <span className={clsx("tabular-nums text-sm font-bold",
               remaining <= 5 ? "text-red-500 animate-pulse" : "text-gray-600")}>
@@ -333,16 +333,16 @@ export default function SoloGamePage() {
         <div className="flex flex-col items-center gap-4 text-center">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-widest text-primary">
-              Tentativa {result.attemptNumber} de {result.maxAttempts}
+              Attempt {result.attemptNumber} of {result.maxAttempts}
             </p>
             <h2 className="text-xl font-bold text-gray-800">
-              {result.isPerfect ? "🎯 Gabarito perfeito!" : "Jogo finalizado"}
+              {result.isPerfect ? "🎯 Perfect score!" : "Quiz complete"}
             </h2>
           </div>
 
           <div className="grid w-full grid-cols-4 gap-2">
             <Stat label="Correct" value={result.correct} />
-            <Stat label="Erros" value={result.incorrect} />
+            <Stat label="Wrong" value={result.incorrect} />
             <Stat label="Streak" value={result.longestStreak} />
             <Stat label="+XP" value={result.xpGained} highlight />
           </div>
@@ -370,11 +370,11 @@ export default function SoloGamePage() {
           <div className="flex w-full gap-2">
             {result.attemptNumber < result.maxAttempts ? (
               <Button onClick={() => { setResult(null); setStage("ready") }} className="flex-1">
-                Tentar novamente
+                Try again
               </Button>
             ) : (
               <div className="flex-1 rounded-lg bg-gray-100 px-4 py-3 text-center text-xs font-semibold text-gray-500">
-                Tentativas esgotadas
+                No attempts left
               </div>
             )}
             <a
@@ -390,7 +390,7 @@ export default function SoloGamePage() {
   }
 
   if (stage === "done" && result && !result.ok) {
-    return <Shell><div className="py-8 text-center text-sm text-red-500">Erro ao salvar: {result.reason}</div></Shell>
+    return <Shell><div className="py-8 text-center text-sm text-red-500">Error saving: {result.reason}</div></Shell>
   }
 
   return <Shell><div className="py-8 text-center text-sm text-gray-400">…</div></Shell>
@@ -398,10 +398,10 @@ export default function SoloGamePage() {
 
 function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <section className="bg-gradient-angel relative flex min-h-dvh flex-col items-center justify-center px-4 py-6">
+    <section className="bg-gradient-angel flex min-h-screen w-full flex-col items-center justify-start px-3 py-4 sm:justify-center sm:py-8">
       <div className={clsx(
-        "card-3d z-10 flex w-full flex-col gap-4 rounded-2xl bg-white p-5",
-        wide ? "max-w-lg" : "max-w-sm"
+        "card-3d z-10 flex w-full flex-col gap-4 rounded-2xl bg-white p-4 sm:p-5",
+        wide ? "max-w-2xl" : "max-w-lg"
       )}>
         {children}
       </div>
