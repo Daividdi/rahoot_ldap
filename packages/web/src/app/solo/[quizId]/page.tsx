@@ -3,9 +3,20 @@
 import Button from "@rahoot/web/components/Button"
 import Input from "@rahoot/web/components/Input"
 import TierBadge from "@rahoot/web/components/profile/TierBadge"
+import AnswerButton from "@rahoot/web/components/AnswerButton"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
+import {
+  ANSWERS_COLORS,
+  ANSWERS_ICONS,
+  SFX_ANSWERS_MUSIC,
+  SFX_ANSWERS_SOUND,
+  SFX_RESULTS_SOUND,
+  SFX_SHOW_SOUND,
+} from "@rahoot/web/utils/constants"
 import { useParams, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { motion, AnimatePresence } from "motion/react"
+import useSound from "use-sound"
 import clsx from "clsx"
 
 const REAL_NAME_KEY = "rahoot_v2_name"
@@ -14,6 +25,7 @@ const KEEP_KEY = "rahoot_keep_logged"
 type SoloQuestion = {
   question: string
   answers: string[]
+  answerImages?: string[] | null
   solution: number
   time: number
   cooldown: number
@@ -48,11 +60,48 @@ type SoloResultResp =
     }
   | { ok: false; reason: string }
 
-// Simple, kahoot-ish point award: faster = more points, decays linearly over the question duration
 function scoreFor(correct: boolean, msToAnswer: number, questionDurationMs: number): number {
   if (!correct) return 0
   const factor = Math.max(0, 1 - msToAnswer / Math.max(1000, questionDurationMs))
   return Math.round(500 + 500 * factor)
+}
+
+// ── Streak helpers ───────────────────────────────────────────────────────────
+const getStreak = (): number => {
+  try { return parseInt(sessionStorage.getItem("rahoot_solo_streak") || "0") } catch { return 0 }
+}
+const saveStreak = (n: number) => {
+  try { sessionStorage.setItem("rahoot_solo_streak", String(n)) } catch {}
+}
+const STREAK_MSGS: Record<number, string> = {
+  2: "2 in a row! On fire!",
+  3: "3 in a row! Hat-trick!",
+  4: "4 streak! Unstoppable!",
+  5: "LEGENDARY 5-streak!",
+}
+const getStreakMsg = (s: number): string | null =>
+  s >= 5 ? STREAK_MSGS[5] : STREAK_MSGS[s] ?? null
+
+// ── StreakBadge ──────────────────────────────────────────────────────────────
+function StreakBadge({ streak }: { streak: number }) {
+  if (streak < 2) return null
+  const icon = streak >= 5 ? "🏆" : streak >= 4 ? "💥" : streak >= 3 ? "🎯" : "🔥"
+  const color =
+    streak >= 5 ? "bg-purple-500" :
+    streak >= 4 ? "bg-orange-500" :
+    streak >= 3 ? "bg-red-500" :
+    "bg-orange-400"
+  return (
+    <motion.div
+      initial={{ scale: 0, rotate: -20 }}
+      animate={{ scale: 1, rotate: 0 }}
+      transition={{ type: "spring", stiffness: 500, damping: 18, delay: 0.55 }}
+      className={clsx("flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-black text-white shadow-lg", color)}
+    >
+      <span className="text-base">{icon}</span>
+      <span>{streak} streak!</span>
+    </motion.div>
+  )
 }
 
 export default function SoloGamePage() {
@@ -61,6 +110,7 @@ export default function SoloGamePage() {
   const searchParams = useSearchParams()
   const quizId = params?.quizId ? decodeURIComponent(params.quizId) : ""
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const [realName, setRealName] = useState<string>("")
   const [needName, setNeedName] = useState(false)
   const [ldapUser, setLdapUser]         = useState("")
@@ -69,15 +119,20 @@ export default function SoloGamePage() {
   const [authLoading, setAuthLoading]   = useState(false)
   const [authError, setAuthError]       = useState("")
 
+  // ── Quiz state ────────────────────────────────────────────────────────────
   const [resp, setResp] = useState<SoloQuizResp | null>(null)
   const [stage, setStage] = useState<"loading" | "ready" | "playing" | "done" | "error">("loading")
   const [error, setError] = useState<string>("")
 
-  // Game state
+  // ── Play state ────────────────────────────────────────────────────────────
   const [qIndex, setQIndex] = useState(0)
+  const [playPhase, setPlayPhase] = useState<"cooldown" | "answers" | "result">("cooldown")
   const [selected, setSelected] = useState<number | null>(null)
-  const [remaining, setRemaining] = useState(0)
-  const [showingAnswer, setShowingAnswer] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [lastCorrect, setLastCorrect] = useState(false)
+  const [lastPoints, setLastPoints] = useState(0)
+  const [streak, setStreak] = useState(0)
+  const [displayPoints, setDisplayPoints] = useState(0)
   const [answers, setAnswers] = useState<
     Array<{ questionTitle: string; selectedAnswer: string; isCorrect: boolean }>
   >([])
@@ -85,14 +140,23 @@ export default function SoloGamePage() {
 
   const questionStartRef = useRef<number>(0)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   const [result, setResult] = useState<SoloResultResp | null>(null)
 
   const quiz = resp?.ok ? resp.quiz : null
   const question = quiz?.questions[qIndex]
   const totalQuestions = quiz?.questions.length ?? 0
 
-  // ── Connect + load name ────────────────────────────────────
+  // ── Sounds ────────────────────────────────────────────────────────────────
+  const [sfxShow]  = useSound(SFX_SHOW_SOUND,    { volume: 0.5 })
+  const [sfxPop]   = useSound(SFX_ANSWERS_SOUND, { volume: 0.1 })
+  const [playMusic, { stop: stopMusic }] = useSound(SFX_ANSWERS_MUSIC, {
+    volume: 0.2,
+    interrupt: true,
+    loop: true,
+  })
+  const [sfxResults] = useSound(SFX_RESULTS_SOUND, { volume: 0.2 })
+
+  // ── Connect + load name ───────────────────────────────────────────────────
   useEffect(() => { if (!isConnected) connect() }, [isConnected, connect])
 
   useEffect(() => {
@@ -111,7 +175,7 @@ export default function SoloGamePage() {
     }
   }, [searchParams])
 
-  // ── Fetch quiz when we have name + socket ──────────────────
+  // ── Fetch quiz ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket || !isConnected || !quizId || !realName || needName) return
     setStage("loading")
@@ -134,7 +198,7 @@ export default function SoloGamePage() {
     return () => { (socket as any).off("solo:quiz", handler) }
   }, [socket, isConnected, quizId, realName, needName])
 
-  // ── Result listener ────────────────────────────────────────
+  // ── Result listener ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return
     const handler = (data: SoloResultResp) => {
@@ -145,59 +209,101 @@ export default function SoloGamePage() {
     return () => { (socket as any).off("solo:result", handler) }
   }, [socket])
 
-  // ── Per-question countdown ─────────────────────────────────
+  // ── Cooldown phase ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (stage !== "playing" || !question || showingAnswer) return
+    if (stage !== "playing" || playPhase !== "cooldown" || !question) return
+    sfxShow()
+    const cd = Math.max(0, question.cooldown)
+    if (cd === 0) {
+      setPlayPhase("answers")
+      return
+    }
+    const t = setTimeout(() => setPlayPhase("answers"), cd * 1000)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, playPhase, qIndex])
+
+  // ── Answer phase timer ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (stage !== "playing" || playPhase !== "answers" || !question) return
+    playMusic()
     questionStartRef.current = Date.now()
-    setRemaining(question.time)
+    setTimeLeft(question.time)
     tickRef.current = setInterval(() => {
-      setRemaining(r => {
+      setTimeLeft(r => {
         if (r <= 1) {
-          if (tickRef.current) clearInterval(tickRef.current)
+          if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
           handleAnswer(null)
           return 0
         }
         return r - 1
       })
     }, 1000)
-    return () => { if (tickRef.current) clearInterval(tickRef.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, qIndex, showingAnswer])
+    return () => {
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      stopMusic()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, playPhase, qIndex])
+
+  // ── Points count-up (result phase) ───────────────────────────────────────
+  useEffect(() => {
+    if (playPhase !== "result" || !lastCorrect || !lastPoints) return
+    let current = 0
+    const step = Math.max(1, Math.ceil(lastPoints / 24))
+    const timer = setInterval(() => {
+      current = Math.min(current + step, lastPoints)
+      setDisplayPoints(current)
+      if (current >= lastPoints) clearInterval(timer)
+    }, 35)
+    return () => clearInterval(timer)
+  }, [playPhase, lastCorrect, lastPoints])
 
   const handleAnswer = useCallback((chosen: number | null) => {
     if (!question || !quiz) return
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+    stopMusic()
     const ms = Date.now() - questionStartRef.current
     const isCorrect = chosen !== null && chosen === question.solution
     const selectedText = chosen === null ? "Not answered" : question.answers[chosen] ?? "Not answered"
     const gained = scoreFor(isCorrect, ms, question.time * 1000)
 
+    const prev = getStreak()
+    const next = isCorrect ? prev + 1 : 0
+    saveStreak(next)
+
     setSelected(chosen)
-    setShowingAnswer(true)
+    setLastCorrect(isCorrect)
+    setLastPoints(gained)
+    setDisplayPoints(0)
+    setStreak(next)
     setAnswers(prev => [...prev, { questionTitle: question.question, selectedAnswer: selectedText, isCorrect }])
     setPoints(p => p + gained)
+    setPlayPhase("result")
+    sfxPop()
+    sfxResults()
 
-    // show correct answer + feedback for 2s, then next or submit
     setTimeout(() => {
-      const next = qIndex + 1
-      if (next >= totalQuestions) {
-        // submit
+      const nextIndex = qIndex + 1
+      if (nextIndex >= totalQuestions) {
+        const allAnswers = [...answers, { questionTitle: question.question, selectedAnswer: selectedText, isCorrect }]
         const payload = {
           quizId: quiz.id,
           realName,
           username: realName,
           startedAt: new Date().toISOString(),
-          answers: [...answers, { questionTitle: question.question, selectedAnswer: selectedText, isCorrect }],
+          answers: allAnswers,
           points: points + gained,
         }
         ;(socket as any)?.emit("solo:submit", payload)
-        setStage("loading")  // wait for solo:result
+        setStage("loading")
       } else {
-        setQIndex(next)
+        setQIndex(nextIndex)
         setSelected(null)
-        setShowingAnswer(false)
+        setPlayPhase("cooldown")
       }
-    }, 2000)
+    }, 3000)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, quiz, qIndex, totalQuestions, answers, points, realName, socket])
 
   const handleStart = () => {
@@ -205,11 +311,12 @@ export default function SoloGamePage() {
     setSelected(null)
     setAnswers([])
     setPoints(0)
-    setShowingAnswer(false)
+    setPlayPhase("cooldown")
+    saveStreak(0)
     setStage("playing")
   }
 
-  // ── Rendering ─────────────────────────────────────────────
+  // ── LDAP login ────────────────────────────────────────────────────────────
   if (needName) {
     const handleLdapAuth = () => {
       if (!ldapUser.trim() || !ldapPass.trim()) return
@@ -219,24 +326,24 @@ export default function SoloGamePage() {
       ;(socket as any).timeout(12000).emit(
         "player:ldapAuth",
         { username: ldapUser.trim(), password: ldapPass },
-        (err: any, result: any) => {
+        (err: any, res: any) => {
           setAuthLoading(false)
           if (err) { setAuthError("Request timed out. Check your connection."); return }
-          if (result?.ok) {
+          if (res?.ok) {
             try {
-              sessionStorage.setItem(REAL_NAME_KEY, result.fullName)
+              sessionStorage.setItem(REAL_NAME_KEY, res.fullName)
               if (keepLoggedIn) {
-                localStorage.setItem(REAL_NAME_KEY, result.fullName)
+                localStorage.setItem(REAL_NAME_KEY, res.fullName)
                 localStorage.setItem(KEEP_KEY, "1")
               } else {
                 localStorage.removeItem(REAL_NAME_KEY)
                 localStorage.removeItem(KEEP_KEY)
               }
             } catch {}
-            setRealName(result.fullName)
+            setRealName(res.fullName)
             setNeedName(false)
           } else {
-            setAuthError(result?.error || "Authentication failed")
+            setAuthError(res?.error || "Authentication failed")
             setLdapPass("")
           }
         }
@@ -301,7 +408,7 @@ export default function SoloGamePage() {
   }
 
   if (stage === "ready" && resp?.ok) {
-    const remaining = resp.maxAttempts - resp.attemptsUsed
+    const attemptsLeft = resp.maxAttempts - resp.attemptsUsed
     return (
       <Shell>
         <div className="flex flex-col gap-3">
@@ -312,10 +419,10 @@ export default function SoloGamePage() {
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Questions" value={resp.quiz.questions.length} />
             <Stat label="Time" value={`${resp.quiz.questions.reduce((s, q) => s + q.time, 0)}s`} />
-            <Stat label="Attempts" value={`${remaining}/${resp.maxAttempts}`} highlight={remaining > 0} />
+            <Stat label="Attempts" value={`${attemptsLeft}/${resp.maxAttempts}`} highlight={attemptsLeft > 0} />
           </div>
           <p className="text-[11px] text-gray-500">
-            You have <span className="font-bold">{remaining}</span> {remaining === 1 ? "attempt" : "attempts"} remaining for this quiz.
+            You have <span className="font-bold">{attemptsLeft}</span> {attemptsLeft === 1 ? "attempt" : "attempts"} remaining for this quiz.
             Results count toward XP and achievements, but not the weekly ranking.
           </p>
           <Button onClick={handleStart}>Start</Button>
@@ -324,66 +431,248 @@ export default function SoloGamePage() {
     )
   }
 
-  if (stage === "playing" && quiz && question) {
+  // ── Playing: cooldown phase ───────────────────────────────────────────────
+  if (stage === "playing" && quiz && question && playPhase === "cooldown") {
     return (
-      <Shell wide>
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
+      <GameShell>
+        <div className="relative mx-auto flex h-full w-full max-w-7xl flex-1 flex-col items-center px-4">
+          <div className="w-full mb-4 h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-accent"
+              style={{ animation: `progressBar ${question.cooldown || 0.5}s linear forwards` }}
+            />
+          </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40">
               Question {qIndex + 1} / {totalQuestions}
-            </span>
-            <span className={clsx("tabular-nums text-sm font-bold",
-              remaining <= 5 ? "text-red-500 animate-pulse" : "text-gray-600")}>
-              {remaining}s
-            </span>
-          </div>
-
-          {question.image && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={question.image} alt="" className="mx-auto max-h-44 rounded-lg object-contain" />
-          )}
-
-          <p className="text-base font-bold text-gray-800">{question.question}</p>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {question.answers.map((a, i) => {
-              const isSelected = selected === i
-              const isCorrect = showingAnswer && i === question.solution
-              const isWrong = showingAnswer && isSelected && i !== question.solution
-              return (
-                <button
-                  key={i}
-                  onClick={() => !showingAnswer && handleAnswer(i)}
-                  disabled={showingAnswer}
-                  className={clsx(
-                    "rounded-xl px-4 py-4 text-left text-sm font-semibold transition-all shadow ring-1",
-                    !showingAnswer && "hover:brightness-105 active:scale-[0.98]",
-                    !isSelected && !showingAnswer && "bg-white text-gray-800 ring-gray-200",
-                    isSelected && !showingAnswer && "bg-primary text-white ring-primary-dark",
-                    isCorrect && "bg-green-500 text-white ring-green-600",
-                    isWrong && "bg-red-500 text-white ring-red-600",
-                    showingAnswer && !isCorrect && !isWrong && "bg-gray-100 text-gray-400 ring-gray-200 opacity-70",
-                  )}
-                >
-                  {a}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
-            <span>Points: <span className="tabular-nums text-gray-800">{points}</span></span>
-            {showingAnswer && (
-              <span className={selected === question.solution ? "text-green-600" : "text-red-500"}>
-                {selected === question.solution ? "✓ Correct" : selected === null ? "Time up" : "✗ Wrong"}
-              </span>
+            </p>
+            <h2 className="text-center text-3xl font-bold text-white drop-shadow-lg md:text-4xl [text-wrap:balance]">
+              {question.question}
+            </h2>
+            {question.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={question.image} alt="" className="max-h-52 w-auto rounded-xl shadow-2xl sm:max-h-80" />
             )}
           </div>
         </div>
-      </Shell>
+      </GameShell>
     )
   }
 
+  // ── Playing: answers phase ────────────────────────────────────────────────
+  if (stage === "playing" && quiz && question && playPhase === "answers") {
+    const timePercent = Math.round((timeLeft / question.time) * 100)
+    const timeColor = timePercent > 50 ? "#4ade80" : timePercent > 25 ? "#fbbf24" : "#f87171"
+    const timeBg = timePercent > 50 ? "bg-green-400" : timePercent > 25 ? "bg-amber-400" : "bg-red-400"
+    const hasAnyAnswerImage = question.answerImages && question.answerImages.some(Boolean)
+
+    return (
+      <GameShell>
+        <div className="flex h-full flex-1 flex-col justify-between">
+          <div className="mx-auto inline-flex h-full w-full max-w-7xl flex-1 flex-col items-center justify-center gap-4 px-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40">
+              Question {qIndex + 1} / {totalQuestions}
+            </p>
+            <h2 className="text-center text-2xl font-bold text-white drop-shadow-lg md:text-4xl [text-wrap:balance]">
+              {question.question}
+            </h2>
+            {question.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt={question.question}
+                src={question.image}
+                className={clsx("mb-2 w-auto rounded-xl shadow-xl px-4", hasAnyAnswerImage ? "max-h-32" : "max-h-52 sm:max-h-80")}
+              />
+            )}
+          </div>
+
+          <div className="pb-2">
+            {/* Stats bar */}
+            <div className="mx-auto mb-3 flex w-full max-w-7xl items-center justify-between gap-3 px-4">
+              <div className="flex items-center gap-2 rounded-2xl bg-black/50 backdrop-blur-sm px-5 py-2.5 shadow-md">
+                <div className="relative flex h-8 w-8 items-center justify-center">
+                  <svg className="absolute inset-0 -rotate-90" viewBox="0 0 32 32" fill="none">
+                    <circle cx="16" cy="16" r="14" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
+                    <circle
+                      cx="16" cy="16" r="14"
+                      stroke={timeColor}
+                      strokeWidth="3"
+                      strokeDasharray={`${2 * Math.PI * 14}`}
+                      strokeDashoffset={`${2 * Math.PI * 14 * (1 - timePercent / 100)}`}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-dashoffset 1s linear, stroke 0.5s" }}
+                    />
+                  </svg>
+                  <span className="relative text-xs font-black text-white tabular-nums">{timeLeft}</span>
+                </div>
+                <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">Time</span>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-2xl bg-black/50 backdrop-blur-sm px-5 py-2.5 shadow-md">
+                <span className="text-xs font-semibold text-white/60 uppercase tracking-wide">Points</span>
+                <span className="text-lg font-black text-white tabular-nums">{points}</span>
+              </div>
+            </div>
+
+            <div className="mx-auto mb-3 h-1.5 w-full max-w-7xl overflow-hidden rounded-full bg-white/10 px-4">
+              <div
+                className={clsx("h-full rounded-full transition-all duration-1000", timeBg)}
+                style={{ width: `${timePercent}%` }}
+              />
+            </div>
+
+            {/* Answer buttons */}
+            <div className="mx-auto mb-3 grid w-full max-w-7xl grid-cols-2 gap-3 px-3">
+              {question.answers.map((answer, i) => {
+                const img = question.answerImages?.[i]
+                return (
+                  <AnswerButton
+                    key={i}
+                    className={clsx(ANSWERS_COLORS[i], img && "!py-3 !items-start")}
+                    icon={ANSWERS_ICONS[i]}
+                    onClick={() => handleAnswer(i)}
+                  >
+                    <span className="flex flex-col items-start gap-1.5 w-full">
+                      {img && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full rounded-xl object-contain shadow-lg border-2 border-white/30"
+                          style={{ maxHeight: "120px" }}
+                        />
+                      )}
+                      {answer && <span>{answer}</span>}
+                    </span>
+                  </AnswerButton>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </GameShell>
+    )
+  }
+
+  // ── Playing: result phase ─────────────────────────────────────────────────
+  if (stage === "playing" && quiz && question && playPhase === "result") {
+    const headline = lastCorrect ? "Correct!" : selected === null ? "Time up!" : "Wrong!"
+    const streakMsg = lastCorrect ? getStreakMsg(streak) : null
+
+    return (
+      <GameShell>
+        <section className="relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-5 px-6">
+
+          {/* Result icon */}
+          <motion.div
+            initial={{ scale: 0, rotate: -25 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 350, damping: 18 }}
+            className={clsx(
+              "flex h-28 w-28 items-center justify-center rounded-full shadow-2xl ring-4",
+              lastCorrect ? "bg-green-500/20 ring-green-400/40" : "bg-red-500/20 ring-red-400/40"
+            )}
+          >
+            {lastCorrect ? (
+              <svg viewBox="0 0 56 56" className="h-16 w-16 fill-green-400 drop-shadow-lg">
+                <path d="M28 52C41.255 52 52 41.255 52 28C52 14.745 41.255 4 28 4C14.745 4 4 14.745 4 28C4 41.255 14.745 52 28 52ZM24.766 40.023C23.969 40.023 23.359 39.672 22.68 38.875L15.93 30.531C15.578 30.086 15.367 29.523 15.367 29.008C15.367 27.906 16.234 27.063 17.266 27.063C17.945 27.063 18.508 27.32 19.07 28.047L24.672 35.289L35.570 17.828C36.016 17.102 36.625 16.75 37.234 16.75C38.266 16.75 39.273 17.43 39.273 18.555C39.273 19.07 38.969 19.633 38.664 20.102L26.758 38.875C26.242 39.648 25.586 40.023 24.766 40.023Z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 56 56" className="h-16 w-16 fill-red-400 drop-shadow-lg">
+                <path d="M28 52C41.255 52 52 41.255 52 28C52 14.745 41.255 4 28 4C14.745 4 4 14.745 4 28C4 41.255 14.745 52 28 52ZM19.586 38.406C18.484 38.406 17.594 37.516 17.594 36.414C17.594 35.875 17.828 35.406 18.203 35.055L25.188 28.023L18.203 20.992C17.828 20.664 17.594 20.172 17.594 19.633C17.594 18.555 18.484 17.688 19.586 17.688C20.125 17.688 20.594 17.898 20.945 18.273L27.977 25.281L35.055 18.25C35.453 17.828 35.875 17.641 36.391 17.641C37.492 17.641 38.383 18.531 38.383 19.609C38.383 20.148 38.195 20.594 37.797 20.969L30.766 28.023L37.773 35.008C38.125 35.383 38.359 35.852 38.359 36.414C38.359 37.516 37.469 38.406 36.367 38.406C35.805 38.406 35.336 38.172 34.984 37.820L27.977 30.789L20.992 37.820C20.641 38.195 20.125 38.406 19.586 38.406Z" />
+              </svg>
+            )}
+          </motion.div>
+
+          {/* Headline + streak */}
+          <div className="flex flex-col items-center gap-2">
+            <motion.h2
+              initial={{ opacity: 0, y: 18, scale: 0.88 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.15 }}
+              className={clsx(
+                "text-center text-4xl font-black drop-shadow-lg",
+                lastCorrect ? "text-white" : "text-white/80"
+              )}
+            >
+              {headline}
+            </motion.h2>
+            {streakMsg && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.28 }}
+                className="text-base font-semibold text-white/60"
+              >
+                {streakMsg}
+              </motion.p>
+            )}
+            <StreakBadge streak={streak} />
+          </div>
+
+          {/* Points badge */}
+          <AnimatePresence>
+            {lastCorrect && (
+              <motion.div
+                initial={{ scale: 0, y: 12 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0 }}
+                transition={{ type: "spring", stiffness: 420, damping: 16, delay: 0.38 }}
+                className="flex items-baseline gap-1.5 rounded-2xl bg-accent px-8 py-3 shadow-xl"
+              >
+                <span className="text-4xl font-black text-gray-900 tabular-nums">+{displayPoints}</span>
+                <span className="text-base font-bold text-gray-700">pts</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Correct answer reveal when wrong */}
+          <AnimatePresence>
+            {!lastCorrect && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ delay: 0.4 }}
+                className="w-full"
+              >
+                <p className="mb-2 text-center text-xs font-semibold uppercase tracking-widest text-white/40">
+                  Correct answer
+                </p>
+                <div className="rounded-xl border border-green-400/30 bg-green-500/15 px-4 py-4 text-center backdrop-blur-sm flex flex-col items-center gap-2">
+                  {question.answerImages?.[question.solution] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={question.answerImages[question.solution]!}
+                      alt=""
+                      className="max-h-28 w-auto rounded-lg object-contain border border-white/20"
+                    />
+                  )}
+                  {question.answers[question.solution] && (
+                    <p className="text-lg font-bold text-green-300">
+                      {question.answers[question.solution]}
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Progress */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="text-xs font-semibold text-white/30"
+          >
+            {qIndex + 1 < totalQuestions ? `Next in 3s…` : "Saving results…"}
+          </motion.p>
+        </section>
+      </GameShell>
+    )
+  }
+
+  // ── Done ──────────────────────────────────────────────────────────────────
   if (stage === "done" && result && "ok" in result && result.ok) {
     return (
       <Shell wide>
@@ -453,6 +742,7 @@ export default function SoloGamePage() {
   return <Shell><div className="py-8 text-center text-sm text-gray-400">…</div></Shell>
 }
 
+// ── Shell: white card (login / ready / done) ─────────────────────────────────
 function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
     <section className="bg-gradient-angel flex min-h-screen w-full flex-col items-center justify-start px-3 py-4 sm:justify-center sm:py-8">
@@ -466,6 +756,19 @@ function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }
   )
 }
 
+// ── GameShell: dark full-screen (playing phases) ──────────────────────────────
+function GameShell({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="relative flex min-h-screen w-full flex-col bg-[#1a1a2e] overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#16213e] via-[#0f3460] to-[#533483] opacity-80 pointer-events-none" />
+      <div className="relative z-10 flex flex-1 flex-col">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+// ── Stat ──────────────────────────────────────────────────────────────────────
 function Stat({ label, value, highlight }: { label: string; value: number | string; highlight?: boolean }) {
   return (
     <div className={clsx(
