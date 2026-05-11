@@ -2,7 +2,7 @@ import { Server } from "@rahoot/common/types/game/socket"
 import { inviteCodeValidator } from "@rahoot/common/validators/auth"
 import env from "@rahoot/socket/env"
 import Config from "@rahoot/socket/services/config"
-import { Database } from "@rahoot/socket/services/db"
+import { Database, db } from "@rahoot/socket/services/db"
 import { backfillXpFromExistingSessions } from "@rahoot/socket/services/sessionRecorder"
 import { backfillBadgesForAll, BADGE_CATALOG_PUBLIC } from "@rahoot/socket/services/badges"
 import Game from "@rahoot/socket/services/game"
@@ -191,8 +191,7 @@ io.on("connection", (socket) => {
   socket.on("manager:getSoloReport", (callback: any) => {
     if (typeof callback !== "function") return
     try {
-      const { db: _db } = require("@rahoot/socket/services/db")
-      const d = _db()
+      const d = db()
 
       // Per-quiz aggregate (solo only) — all players, no ldap filter
       const quizStats = d.prepare(`
@@ -294,7 +293,6 @@ io.on("connection", (socket) => {
       // Also update the SQLite players table so rankings and history use the corrected name
       if (correctedName && correctedName.trim()) {
         try {
-          const { db } = require("@rahoot/socket/services/db")
           db().prepare("UPDATE players SET real_name = ? WHERE client_id = ?").run(correctedName.trim(), clientId)
         } catch {}
       }
@@ -548,8 +546,7 @@ io.on("connection", (socket) => {
       const result = await ldapAuthenticate(String(username).trim(), String(password))
       if (result.ok) {
         try {
-          const { db: _db } = require("@rahoot/socket/services/db")
-          _db().prepare("INSERT OR IGNORE INTO ldap_players (real_name) VALUES (?)").run(result.fullName)
+          db().prepare("INSERT OR IGNORE INTO ldap_players (real_name) VALUES (?)").run(result.fullName)
         } catch {}
       }
       callback(result)
