@@ -157,14 +157,20 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     })
   }, [socket])
 
-  useEffect(() => {
-    if (!socket || soloReport !== null) return
+  const fetchSoloReport = () => {
+    if (!socket) return
     setSoloLoading(true)
-    ;(socket as any).timeout(10000).emit("manager:getSoloReport", (err: any, data: any) => {
+    ;(socket as any).timeout(15000).emit("manager:getSoloReport", (err: any, data: any) => {
       setSoloLoading(false)
       if (!err && data) setSoloReport(data)
     })
-  }, [socket, soloReport])
+  }
+
+  useEffect(() => {
+    if (!socket || soloReport !== null) return
+    fetchSoloReport()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket])
 
   const applyName = (key: string, fallback: string) =>
     nameCorrections[key] || fallback
@@ -667,7 +673,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             <ManagerPlayers quizzList={localList} regionFilter={rFilter} />
           </div>
         ) : null}
-        <div className={clsx("flex-1 min-h-0 overflow-auto p-5 flex flex-col gap-5", (activeView === "quizzes" || activeView === "team" || activeView === "solo" || activeView === "combined") && "hidden")}>
+        <div className={clsx("flex-1 min-h-0 overflow-auto p-5 flex flex-col gap-5", (activeView === "quizzes" || activeView === "team") && "hidden")}>
 
           {/* ── OVERVIEW ──────────────────────────────────────────────────── */}
           {activeView === "overview" && (<>
@@ -1132,6 +1138,15 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           {/* ── SOLO GAMES ────────────────────────────────────────────────── */}
           {(activeView === "solo") && (
             <div className="flex flex-col gap-5">
+              <div className="flex items-center justify-between">
+                <div/>
+                <button onClick={() => { setSoloReport(null); fetchSoloReport() }}
+                  disabled={soloLoading}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                  Refresh
+                </button>
+              </div>
               {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading solo data…</div>}
               {soloReport && !soloReport.ok && <div className="rounded-2xl bg-red-50 px-6 py-4 text-sm text-red-600">Failed to load: {(soloReport as any).error}</div>}
               {soloReport && soloReport.ok && (() => {

@@ -194,7 +194,7 @@ io.on("connection", (socket) => {
       const { db: _db } = require("@rahoot/socket/services/db")
       const d = _db()
 
-      // Per-quiz aggregate (solo only)
+      // Per-quiz aggregate (solo only) — all players, no ldap filter
       const quizStats = d.prepare(`
         SELECT sa.quiz_id,
           COALESCE(
@@ -208,12 +208,11 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
-        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
         GROUP BY sa.quiz_id
         ORDER BY total_attempts DESC
       `).all()
 
-      // Per-player aggregate (solo only)
+      // Per-player aggregate (solo only) — all players
       const playerStats = d.prepare(`
         SELECT p.real_name,
           COUNT(*) AS total_attempts,
@@ -225,12 +224,11 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
-        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
         GROUP BY sa.player_id
         ORDER BY avg_accuracy DESC, total_correct DESC
       `).all()
 
-      // Per-player per-quiz detail
+      // Per-player per-quiz detail — all players
       const detail = d.prepare(`
         SELECT p.real_name, sa.quiz_id,
           COALESCE(
@@ -244,15 +242,14 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
-        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
         GROUP BY sa.player_id, sa.quiz_id
         ORDER BY p.real_name, sa.quiz_id
       `).all()
 
-      // Per-player aggregate (team/classic only) for combined view
+      // Per-player aggregate (team/classic only) — all players, no ldap filter
       const teamStats = d.prepare(`
         SELECT p.real_name,
-          COUNT(*) AS games_played,
+          COUNT(DISTINCT s.id) AS games_played,
           ROUND(AVG(sp.rank)) AS avg_rank,
           SUM(sp.correct) AS total_correct,
           SUM(sp.incorrect + sp.unanswered) AS total_wrong,
@@ -262,7 +259,6 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
-        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
         GROUP BY sp.player_id
         ORDER BY avg_accuracy DESC
       `).all()
