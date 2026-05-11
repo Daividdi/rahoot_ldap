@@ -302,7 +302,7 @@ export default function SoloGamePage() {
         setSelected(null)
         setPlayPhase("cooldown")
       }
-    }, 3000)
+    }, 8000)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, quiz, qIndex, totalQuestions, answers, points, realName, socket])
 

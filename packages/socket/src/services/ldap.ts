@@ -147,6 +147,36 @@ function parseDisplayName(buf: Buffer): string | null {
   return buf.slice(pos, pos + vlen).toString('utf8')
 }
 
+
+// Shorten a display name to fit the 20-char username limit.
+// Strategy: First [M.] Last  →  First Last  →  hard slice
+const PARTICLES = new Set(['de','da','do','dos','das','e','di','del','van','von'])
+function abbreviateForUsername(name: string, max = 20): string {
+  name = name.trim()
+  if (name.length <= max) return name
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return name.slice(0, max)
+  const first = parts[0]
+  const last  = parts[parts.length - 1]
+  // Collect particles that prefix the last surname
+  const prefixes: string[] = []
+  let i = parts.length - 2
+  while (i > 0 && PARTICLES.has(parts[i].toLowerCase())) { prefixes.unshift(parts[i]); i-- }
+  // Middle names (non-particle)
+  const middles = parts.slice(1, parts.length - 1).filter(p => !PARTICLES.has(p.toLowerCase()))
+  // Try: First [particles] Last
+  const simple = [first, ...prefixes, last].join(' ')
+  if (simple.length <= max) return simple
+  // Try: First M. Last (first initial per middle word)
+  const withInit = [first, ...middles.map(m => m[0] + '.'), last].join(' ')
+  if (withInit.length <= max) return withInit
+  // Try: First Last
+  const bare = `${first} ${last}`
+  if (bare.length <= max) return bare
+  // Hard slice
+  return bare.slice(0, max).trimEnd()
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export type LdapAuthResult =
@@ -189,7 +219,7 @@ export async function ldapAuthenticate(username: string, password: string): Prom
     }
 
     conn.destroy()
-    return { ok: true, fullName: displayName || username }
+    return { ok: true, fullName: abbreviateForUsername(displayName || username) }
   } catch (err: any) {
     conn?.destroy()
     const msg = err?.message || ''
