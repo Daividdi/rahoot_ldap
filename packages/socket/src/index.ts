@@ -262,7 +262,38 @@ io.on("connection", (socket) => {
         ORDER BY avg_accuracy DESC
       `).all()
 
-      callback({ ok: true, quizStats, playerStats, detail, teamStats })
+      // Per-quiz aggregate for team/classic games
+      const teamQuizStats = d.prepare(`
+        SELECT s.quiz_id, s.quiz_title,
+          COUNT(DISTINCT s.id) AS total_sessions,
+          COUNT(DISTINCT sp.player_id) AS unique_players,
+          ROUND(100.0 * SUM(sp.correct) / MAX(1, SUM(sp.correct + sp.incorrect + sp.unanswered))) AS avg_accuracy,
+          MAX(sp.points) AS best_score,
+          MAX(s.ended_at) AS last_played
+        FROM sessions s
+        JOIN session_players sp ON sp.session_id = s.id
+        WHERE s.mode = 'classic'
+        GROUP BY s.quiz_id
+        ORDER BY total_sessions DESC
+      `).all()
+
+      // Per-player per-quiz detail for team games
+      const teamDetail = d.prepare(`
+        SELECT p.real_name, s.quiz_id, s.quiz_title,
+          COUNT(DISTINCT s.id) AS sessions,
+          SUM(sp.correct) AS total_correct,
+          MAX(sp.points) AS best_points,
+          ROUND(100.0 * SUM(sp.correct) / MAX(1, SUM(sp.correct + sp.incorrect + sp.unanswered))) AS avg_accuracy,
+          MIN(sp.rank) AS best_rank,
+          MAX(s.ended_at) AS last_played
+        FROM session_players sp
+        JOIN sessions s ON sp.session_id = s.id AND s.mode = 'classic'
+        JOIN players p ON p.id = sp.player_id
+        GROUP BY sp.player_id, s.quiz_id
+        ORDER BY p.real_name, s.quiz_id
+      `).all()
+
+      callback({ ok: true, quizStats, playerStats, detail, teamStats, teamQuizStats, teamDetail })
     } catch (err: any) {
       callback({ ok: false, error: String(err) })
     }
