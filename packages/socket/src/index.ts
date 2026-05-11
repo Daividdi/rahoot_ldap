@@ -185,6 +185,94 @@ io.on("connection", (socket) => {
     } catch { callback({}) }
   })
 
+
+
+  // ── Solo + Combined DB report for manager analytics ──────────────────────
+  socket.on("manager:getSoloReport", (callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const { db: _db } = require("@rahoot/socket/services/db")
+      const d = _db()
+
+      // Per-quiz aggregate (solo only)
+      const quizStats = d.prepare(`
+        SELECT sa.quiz_id,
+          COALESCE(
+            (SELECT quiz_title FROM sessions WHERE quiz_id = sa.quiz_id AND mode = 'solo' LIMIT 1),
+            sa.quiz_id
+          ) AS quiz_title,
+          COUNT(*) AS total_attempts,
+          COUNT(DISTINCT sa.player_id) AS unique_players,
+          ROUND(100.0 * SUM(sa.correct) / MAX(1, SUM(sa.correct + sa.incorrect + sa.unanswered))) AS avg_accuracy,
+          MAX(sa.points) AS best_score,
+          MAX(sa.ended_at) AS last_played
+        FROM solo_attempts sa
+        JOIN players p ON p.id = sa.player_id
+        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+        GROUP BY sa.quiz_id
+        ORDER BY total_attempts DESC
+      `).all()
+
+      // Per-player aggregate (solo only)
+      const playerStats = d.prepare(`
+        SELECT p.real_name,
+          COUNT(*) AS total_attempts,
+          COUNT(DISTINCT sa.quiz_id) AS quizzes_played,
+          SUM(sa.correct) AS total_correct,
+          SUM(sa.incorrect + sa.unanswered) AS total_wrong,
+          ROUND(100.0 * SUM(sa.correct) / MAX(1, SUM(sa.correct + sa.incorrect + sa.unanswered))) AS avg_accuracy,
+          MAX(sa.points) AS best_points,
+          MAX(sa.ended_at) AS last_played
+        FROM solo_attempts sa
+        JOIN players p ON p.id = sa.player_id
+        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+        GROUP BY sa.player_id
+        ORDER BY avg_accuracy DESC, total_correct DESC
+      `).all()
+
+      // Per-player per-quiz detail
+      const detail = d.prepare(`
+        SELECT p.real_name, sa.quiz_id,
+          COALESCE(
+            (SELECT quiz_title FROM sessions WHERE quiz_id = sa.quiz_id AND mode = 'solo' LIMIT 1),
+            sa.quiz_id
+          ) AS quiz_title,
+          COUNT(*) AS attempts,
+          MAX(sa.correct) AS best_correct,
+          MAX(sa.points) AS best_points,
+          ROUND(MAX(100.0 * sa.correct / MAX(1, sa.correct + sa.incorrect + sa.unanswered))) AS best_accuracy,
+          MAX(sa.ended_at) AS last_played
+        FROM solo_attempts sa
+        JOIN players p ON p.id = sa.player_id
+        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+        GROUP BY sa.player_id, sa.quiz_id
+        ORDER BY p.real_name, sa.quiz_id
+      `).all()
+
+      // Per-player aggregate (team/classic only) for combined view
+      const teamStats = d.prepare(`
+        SELECT p.real_name,
+          COUNT(*) AS games_played,
+          ROUND(AVG(sp.rank)) AS avg_rank,
+          SUM(sp.correct) AS total_correct,
+          SUM(sp.incorrect + sp.unanswered) AS total_wrong,
+          ROUND(100.0 * SUM(sp.correct) / MAX(1, SUM(sp.correct + sp.incorrect + sp.unanswered))) AS avg_accuracy,
+          MAX(sp.points) AS best_points,
+          MAX(s.ended_at) AS last_played
+        FROM session_players sp
+        JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
+        JOIN players p ON p.id = sp.player_id
+        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+        GROUP BY sp.player_id
+        ORDER BY avg_accuracy DESC
+      `).all()
+
+      callback({ ok: true, quizStats, playerStats, detail, teamStats })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
   // Player asks on mount: "do I have an AKA?" — returns corrected name or null
   socket.on("player:checkName", (callback: any) => {
     try {

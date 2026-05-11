@@ -13,7 +13,7 @@ import logo from "@rahoot/web/assets/logo.svg"
 type Props = { quizzList: any[]; initialRegion?: "all" | "BR" | "MY" | "CN"; onSelect?: (_id: string) => void; onListChange?: (newList: any[]) => void }
 type RFilter = "all" | "BR" | "MY" | "CN"
 type PFilter = "all" | "month" | "week"
-type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team"
+type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team" | "solo" | "combined"
 
 const EXCLUDED_PLAYERS = ["test user"]
 const isExcluded = (name: string) => {
@@ -139,12 +139,32 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [localCancelled, setLocalCancelled] = useState<Record<string, number[]>>({})
   const [nameCorrections, setNameCorrections] = useState<Record<string, string>>({})
 
+  type SoloQuizStat = { quiz_id: string; quiz_title: string; total_attempts: number; unique_players: number; avg_accuracy: number; best_score: number; last_played: string }
+  type SoloPlayerStat = { real_name: string; total_attempts: number; quizzes_played: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
+  type SoloDetail = { real_name: string; quiz_id: string; quiz_title: string; attempts: number; best_correct: number; best_points: number; best_accuracy: number; last_played: string }
+  type TeamPlayerStat = { real_name: string; games_played: number; avg_rank: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
+  type SoloReport = { ok: true; quizStats: SoloQuizStat[]; playerStats: SoloPlayerStat[]; detail: SoloDetail[]; teamStats: TeamPlayerStat[] } | { ok: false; error: string }
+
+  const [soloReport, setSoloReport] = useState<SoloReport | null>(null)
+  const [soloLoading, setSoloLoading] = useState(false)
+  const [soloExpandedPlayer, setSoloExpandedPlayer] = useState<string | null>(null)
+  const [combinedSort, setCombinedSort] = useState<"name" | "solo_acc" | "team_acc" | "solo_games" | "team_games">("name")
+
   useEffect(() => {
     if (!socket) return
     ;(socket as any).emit("manager:getPlayerNames", (data: Record<string, string>) => {
       setNameCorrections(data || {})
     })
   }, [socket])
+
+  useEffect(() => {
+    if (!socket || soloReport !== null) return
+    setSoloLoading(true)
+    ;(socket as any).timeout(10000).emit("manager:getSoloReport", (err: any, data: any) => {
+      setSoloLoading(false)
+      if (!err && data) setSoloReport(data)
+    })
+  }, [socket, soloReport])
 
   const applyName = (key: string, fallback: string) =>
     nameCorrections[key] || fallback
@@ -538,6 +558,8 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     { id: "leaderboard",   label: "Leaderboard",   icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> },
     { id: "participation", label: "Participation", icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
     { id: "activity",      label: "Activity",      icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
+    { id: "solo",          label: "Solo Games",    icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2-8 3v1h16v-1c0-1-3-3-8-3z"/><path d="M19 3l1.5 1.5L17 8l-1.5-1.5z" strokeWidth="1.4"/></svg> },
+    { id: "combined",      label: "All Players",   icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
   ]
   const manageNav: { id: NavView; label: string; icon: React.ReactNode }[] = [
     { id: "quizzes", label: "My Quizzes",  icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg> },
@@ -645,7 +667,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             <ManagerPlayers quizzList={localList} regionFilter={rFilter} />
           </div>
         ) : null}
-        <div className={clsx("flex-1 min-h-0 overflow-auto p-5 flex flex-col gap-5", (activeView === "quizzes" || activeView === "team") && "hidden")}>
+        <div className={clsx("flex-1 min-h-0 overflow-auto p-5 flex flex-col gap-5", (activeView === "quizzes" || activeView === "team" || activeView === "solo" || activeView === "combined") && "hidden")}>
 
           {/* ── OVERVIEW ──────────────────────────────────────────────────── */}
           {activeView === "overview" && (<>
@@ -1103,6 +1125,235 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+
+          {/* ── SOLO GAMES ────────────────────────────────────────────────── */}
+          {(activeView === "solo") && (
+            <div className="flex flex-col gap-5">
+              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading solo data…</div>}
+              {soloReport && !soloReport.ok && <div className="rounded-2xl bg-red-50 px-6 py-4 text-sm text-red-600">Failed to load: {(soloReport as any).error}</div>}
+              {soloReport && soloReport.ok && (() => {
+                const qs = soloReport.quizStats
+                const ps = soloReport.playerStats
+                const det = soloReport.detail
+                const totalAttempts = qs.reduce((s, q) => s + q.total_attempts, 0)
+                const uniquePlayers = ps.length
+                const avgAcc = ps.length > 0 ? Math.round(ps.reduce((s, p) => s + p.avg_accuracy, 0) / ps.length) : 0
+                return (<>
+                  {/* KPI cards */}
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { label: "Total Attempts", val: totalAttempts, icon: "#009edf", stroke: <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6M9 16h4"/>, col: "bg-primary" },
+                      { label: "Active Players", val: uniquePlayers, icon: "#22c55e", stroke: <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></>, col: "bg-green-500" },
+                      { label: "Avg Accuracy", val: `${avgAcc}%`, icon: "#f59e0b", stroke: <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>, col: "bg-amber-400" },
+                    ].map((c, ci) => (
+                      <div key={ci} className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 relative overflow-hidden">
+                        <div className={clsx("absolute inset-y-0 left-0 w-1 rounded-l-2xl", c.col)} />
+                        <div className="pl-2">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: c.icon + "18" }}>
+                              <svg width="20" height="20" fill="none" stroke={c.icon} strokeWidth="2" viewBox="0 0 24 24">{c.stroke}</svg>
+                            </div>
+                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">{c.label}</span>
+                          </div>
+                          <div className="text-3xl font-bold text-gray-900 tabular-nums">{c.val}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Quiz breakdown */}
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                    <h3 className="mb-4 text-base font-semibold text-gray-800">By Quiz</h3>
+                    {qs.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No solo attempts yet</p>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 80px 80px 120px 100px" }}>
+                          <span>Quiz</span><span className="text-center">Players</span><span className="text-center">Attempts</span><span>Accuracy</span><span>Last played</span>
+                        </div>
+                        {qs.map(q => {
+                          const acc = Math.round(q.avg_accuracy || 0)
+                          const color = acc >= 65 ? "#22c55e" : acc >= 50 ? "#009edf" : acc >= 35 ? "#f59e0b" : "#ef4444"
+                          const ago = q.last_played ? (() => { try { const d = new Date(q.last_played); const diff = Date.now() - d.getTime(); const days = Math.floor(diff/86400000); return days === 0 ? "Today" : days === 1 ? "Yesterday" : `${days}d ago` } catch { return "" } })() : ""
+                          return (
+                            <div key={q.quiz_id} className="grid gap-3 items-center rounded-xl px-3 py-3 hover:bg-gray-50 transition-colors" style={{ gridTemplateColumns: "1fr 80px 80px 120px 100px" }}>
+                              <span className="text-sm font-medium text-gray-700 truncate" title={q.quiz_title}>{q.quiz_title}</span>
+                              <span className="text-sm font-bold text-gray-700 text-center tabular-nums">{q.unique_players}</span>
+                              <span className="text-sm font-bold text-gray-700 text-center tabular-nums">{q.total_attempts}</span>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${Math.max(acc,2)}%`, background: color }} />
+                                </div>
+                                <span className="text-xs font-bold w-10 text-right" style={{ color }}>{acc}%</span>
+                              </div>
+                              <span className="text-xs text-gray-400">{ago}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Player breakdown */}
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                    <h3 className="mb-4 text-base font-semibold text-gray-800">By Player</h3>
+                    {ps.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No solo attempts yet</p>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}>
+                          <span>Player</span><span className="text-center">Quizzes</span><span className="text-center">Attempts</span><span className="text-center">Correct</span><span>Accuracy</span><span/>
+                        </div>
+                        {ps.map(p => {
+                          const acc = Math.round(p.avg_accuracy || 0)
+                          const color = acc >= 65 ? "#22c55e" : acc >= 50 ? "#009edf" : acc >= 35 ? "#f59e0b" : "#ef4444"
+                          const isExp = soloExpandedPlayer === p.real_name
+                          const pDetail = det.filter(d => d.real_name === p.real_name)
+                          return (
+                            <div key={p.real_name} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all">
+                              <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
+                                style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}
+                                onClick={() => setSoloExpandedPlayer(isExp ? null : p.real_name)}>
+                                <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
+                                <span className="text-sm text-gray-700 text-center tabular-nums">{p.quizzes_played}</span>
+                                <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_attempts}</span>
+                                <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_correct}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${Math.max(acc,2)}%`, background: color }} />
+                                  </div>
+                                  <span className="text-xs font-bold w-10 text-right" style={{ color }}>{acc}%</span>
+                                </div>
+                                <svg width="14" height="14" fill="none" stroke="#cbd5e1" strokeWidth="2.5" viewBox="0 0 24 24" className={clsx("shrink-0 transition-transform", isExp && "rotate-90")}><path d="M9 18l6-6-6-6"/></svg>
+                              </div>
+                              {isExp && pDetail.length > 0 && (
+                                <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 flex flex-col gap-1.5">
+                                  <div className="grid gap-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 60px 90px" }}>
+                                    <span>Quiz</span><span className="text-center">Tries</span><span className="text-center">Best score</span><span>Best accuracy</span>
+                                  </div>
+                                  {pDetail.map(d => {
+                                    const da = Math.round(d.best_accuracy || 0)
+                                    const dc = da >= 65 ? "#22c55e" : da >= 50 ? "#009edf" : da >= 35 ? "#f59e0b" : "#ef4444"
+                                    return (
+                                      <div key={d.quiz_id} className="grid gap-3 items-center rounded-lg px-3 py-2 bg-white border border-gray-100" style={{ gridTemplateColumns: "1fr 60px 60px 90px" }}>
+                                        <span className="text-xs font-medium text-gray-600 truncate" title={d.quiz_title}>{d.quiz_title}</span>
+                                        <span className="text-xs text-gray-500 text-center tabular-nums">{d.attempts}</span>
+                                        <span className="text-xs font-bold text-gray-700 text-center tabular-nums">{d.best_points}</span>
+                                        <span className="text-xs font-bold" style={{ color: dc }}>{da}%</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>)
+              })()}
+            </div>
+          )}
+
+          {/* ── COMBINED (All Players) ─────────────────────────────────────── */}
+          {(activeView === "combined") && (
+            <div className="flex flex-col gap-5">
+              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
+              {soloReport && soloReport.ok && (() => {
+                const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
+                const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
+                const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
+
+                const rows = allNames.map(name => ({
+                  name,
+                  solo_games: soloMap.get(name)?.total_attempts ?? 0,
+                  solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
+                  solo_correct: soloMap.get(name)?.total_correct ?? 0,
+                  team_games: teamMap.get(name)?.games_played ?? 0,
+                  team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
+                  team_correct: teamMap.get(name)?.total_correct ?? 0,
+                }))
+
+                const sorted = [...rows].sort((a, b) => {
+                  if (combinedSort === "name") return a.name.localeCompare(b.name)
+                  if (combinedSort === "solo_acc") return b.solo_acc - a.solo_acc
+                  if (combinedSort === "team_acc") return b.team_acc - a.team_acc
+                  if (combinedSort === "solo_games") return b.solo_games - a.solo_games
+                  if (combinedSort === "team_games") return b.team_games - a.team_games
+                  return 0
+                })
+
+                const SortBtn = ({ id, label }: { id: typeof combinedSort; label: string }) => (
+                  <button onClick={() => setCombinedSort(id)}
+                    className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors",
+                      combinedSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
+                    {label}
+                  </button>
+                )
+
+                return (
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                    <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                      <h3 className="text-base font-semibold text-gray-800">All Players — Team &amp; Solo</h3>
+                      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                        <SortBtn id="name" label="Name" />
+                        <SortBtn id="team_acc" label="Team acc" />
+                        <SortBtn id="solo_acc" label="Solo acc" />
+                        <SortBtn id="team_games" label="Team games" />
+                        <SortBtn id="solo_games" label="Solo attempts" />
+                      </div>
+                    </div>
+
+                    {sorted.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No data yet</p>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="grid gap-2 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400"
+                          style={{ gridTemplateColumns: "1fr repeat(2, 130px) repeat(2, 80px)" }}>
+                          <span>Player</span>
+                          <span>Team accuracy</span>
+                          <span>Solo accuracy</span>
+                          <span className="text-center">Team</span>
+                          <span className="text-center">Solo</span>
+                        </div>
+                        {sorted.map(r => {
+                          const ta = Math.round(r.team_acc), sa = Math.round(r.solo_acc)
+                          const tc = ta >= 65 ? "#22c55e" : ta >= 50 ? "#009edf" : ta >= 35 ? "#f59e0b" : ta > 0 ? "#ef4444" : "#d1d5db"
+                          const sc = sa >= 65 ? "#22c55e" : sa >= 50 ? "#009edf" : sa >= 35 ? "#f59e0b" : sa > 0 ? "#ef4444" : "#d1d5db"
+                          return (
+                            <div key={r.name} className="grid gap-2 items-center rounded-xl px-3 py-3 hover:bg-gray-50 transition-colors"
+                              style={{ gridTemplateColumns: "1fr repeat(2, 130px) repeat(2, 80px)" }}>
+                              <span className="text-sm font-semibold text-gray-700 truncate">{r.name}</span>
+                              <div className="flex items-center gap-2">
+                                {r.team_games > 0 ? (<>
+                                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${Math.max(ta,2)}%`, background: tc }} />
+                                  </div>
+                                  <span className="text-xs font-bold w-9 text-right" style={{ color: tc }}>{ta}%</span>
+                                </>) : <span className="text-xs text-gray-300">—</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {r.solo_games > 0 ? (<>
+                                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${Math.max(sa,2)}%`, background: sc }} />
+                                  </div>
+                                  <span className="text-xs font-bold w-9 text-right" style={{ color: sc }}>{sa}%</span>
+                                </>) : <span className="text-xs text-gray-300">—</span>}
+                              </div>
+                              <span className={clsx("text-sm tabular-nums text-center font-semibold", r.team_games > 0 ? "text-gray-700" : "text-gray-300")}>{r.team_games > 0 ? r.team_games : "—"}</span>
+                              <span className={clsx("text-sm tabular-nums text-center font-semibold", r.solo_games > 0 ? "text-gray-700" : "text-gray-300")}>{r.solo_games > 0 ? r.solo_games : "—"}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
 
