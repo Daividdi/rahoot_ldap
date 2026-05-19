@@ -107,6 +107,7 @@ export function getSoloQuizFor(quizId: string, realName: string): SoloQuizRespon
       questions: (quiz.questions || []).map((q: any) => ({
         question: q.question,
         answers: q.answers,
+        answerImages: q.answerImages || null,
         solution: q.solution,
         time: Number(q.time) || 15,
         cooldown: Number(q.cooldown) || 0,
