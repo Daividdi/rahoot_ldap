@@ -389,7 +389,7 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
   }
 
   const handleFeedbackSkip = () => {
-    if (gameId) (socket as any)?.emit(player:submitFeedback, { gameId, rating: 5 })
+    if (gameId) (socket as any)?.emit("player:submitFeedback", { gameId, rating: 5 })
     setFeedbackSubmitted(true)
   }
 
