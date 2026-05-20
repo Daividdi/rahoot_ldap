@@ -225,8 +225,12 @@ const Podium = ({ data: { subject, top, questions } }: Props) => {
               exit={{}}
               transition={{ duration: 3.8, delay: p.delay, ease: [0.2, 0.8, 0.3, 1] }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt="" style={{ width: p.size, height: p.size }} className="drop-shadow-2xl" />
+              {p.url.startsWith("/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.url} alt="" style={{ width: p.size, height: p.size }} className="drop-shadow-2xl" />
+              ) : (
+                <span style={{ fontSize: p.size * 0.75 }} className="leading-none select-none drop-shadow-2xl">{p.url}</span>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

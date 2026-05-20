@@ -30,7 +30,7 @@ const ReviewQuestions = ({ data, isManager = false }: Props) => {
     <div className="flex flex-1 flex-col items-center justify-between px-4 pb-6 pt-2 gap-4 w-full max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex w-full items-center justify-between">
-        <h1 className="text-xl font-bold text-white/80 uppercase tracking-widest">Revisão</h1>
+        <h1 className="text-xl font-bold text-white/80 uppercase tracking-widest">Review</h1>
         <span className="rounded-full bg-white/10 px-4 py-1.5 text-sm font-bold text-white">
           {currentIndex + 1} / {total}
         </span>
@@ -87,24 +87,24 @@ const ReviewQuestions = ({ data, isManager = false }: Props) => {
             onClick={handlePrev}
             className="rounded-xl bg-white/10 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-30 transition-all"
           >
-            ← Anterior
+            ← Previous
           </button>
           <button
             onClick={handlePodium}
             className="rounded-xl bg-blue-600 px-8 py-2.5 text-sm font-bold text-white hover:bg-blue-500 shadow-lg shadow-blue-600/30 transition-all"
           >
-            🏆 Ir para o Pódio
+            🏆 Go to Podium
           </button>
           <button
             disabled={currentIndex === total - 1}
             onClick={handleNext}
             className="rounded-xl bg-white/10 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-30 transition-all"
           >
-            Próxima →
+            Next →
           </button>
         </div>
       ) : (
-        <p className="text-sm text-white/40 italic">Aguardando o trainer...</p>
+        <p className="text-sm text-white/40 italic">Waiting for the trainer...</p>
       )}
     </div>
   )

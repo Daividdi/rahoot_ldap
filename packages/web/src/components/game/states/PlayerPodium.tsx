@@ -42,6 +42,9 @@ const REACTIONS = [
   { id: "clap",  url: "/emojis/clap.png",  label: "Applause", bg: "bg-amber-500/80",  activeBg: "bg-amber-500"  },
   { id: "laugh", url: "/emojis/laugh.png", label: "Laugh",    bg: "bg-yellow-400/80", activeBg: "bg-yellow-400" },
   { id: "wow",   url: "/emojis/wow.png",   label: "Wow",      bg: "bg-blue-500/80",   activeBg: "bg-blue-500"   },
+  { id: "br",    url: "🇧🇷",               label: "Brazil",   bg: "bg-green-700/80",  activeBg: "bg-green-700"  },
+  { id: "my",    url: "🇲🇾",               label: "Malaysia",  bg: "bg-red-700/80",    activeBg: "bg-red-700"    },
+  { id: "cn",    url: "🇨🇳",               label: "China",    bg: "bg-red-800/80",    activeBg: "bg-red-800"    },
 ]
 
 type Particle = { id: number; url: string; x: number; size: number; drift: number }
@@ -452,8 +455,12 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
               animate={{ y: -720, opacity: [1, 1, 0.9, 0.5, 0], scale: [0.6, 1.2, 1.0, 0.85, 0.7], x: p.drift, rotate: 12 }}
               exit={{}} transition={{ duration: 3.6, ease: [0.2, 0.8, 0.3, 1] }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt="" style={{ width: p.size, height: p.size }} className="drop-shadow-2xl" />
+              {p.url.startsWith("/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.url} alt="" style={{ width: p.size, height: p.size }} className="drop-shadow-2xl" />
+              ) : (
+                <span style={{ fontSize: p.size * 0.75 }} className="leading-none select-none drop-shadow-2xl">{p.url}</span>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -540,8 +547,12 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
             <motion.button key={r.id} whileHover={{ scale: 1.18 }} whileTap={{ scale: 0.84 }}
               onClick={() => fireReaction(r)}
               className={clsx("flex flex-col items-center gap-1 rounded-xl px-3 py-2 shadow-lg active:brightness-125", r.bg)}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={r.url} alt={r.label} className="h-11 w-11 drop-shadow-lg" />
+              {r.url.startsWith("/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.url} alt={r.label} className="h-11 w-11 drop-shadow-lg" />
+              ) : (
+                <span className="text-4xl leading-none select-none drop-shadow-lg">{r.url}</span>
+              )}
               <span className="text-[9px] font-bold text-white/90 tracking-wide">{r.label}</span>
             </motion.button>
           ))}
