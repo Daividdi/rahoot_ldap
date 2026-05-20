@@ -1,5 +1,6 @@
 "use client"
 import { abbreviateName } from "@rahoot/web/utils/abbreviateName"
+import { STATUS } from "@rahoot/common/types/game/status"
 
 import Button from "@rahoot/web/components/Button"
 import Input from "@rahoot/web/components/Input"
@@ -7,7 +8,7 @@ import TierBadge from "@rahoot/web/components/profile/TierBadge"
 import XpBar from "@rahoot/web/components/profile/XpBar"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import AvatarDisplay from "@rahoot/web/components/profile/AvatarDisplay"
 import Link from "next/link"
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
@@ -128,7 +129,9 @@ const getStoredAvatarUrl = (): string => {
 
 const PlayerHomeCard = () => {
   const { socket, isConnected } = useSocket()
-  const { join } = usePlayerStore()
+  const { join, login, setStatus } = usePlayerStore()
+  const router = useRouter()
+  const pendingGameIdRef = useRef<string | null>(null)
   const searchParams = useSearchParams()
   const hasAutoJoinedRef = useRef(false)
 
@@ -170,8 +173,29 @@ const PlayerHomeCard = () => {
     ;(socket as any).emit("player:getProfile", { realName: storedName })
   }, [socket, isConnected, storedName])
 
-  useEvent("game:successRoom" as any, (gameId: string) => {
-    join(gameId)
+  useEvent("game:successRoom" as any, (gId: string) => {
+    const name = getStoredName()
+    if (name) {
+      const url = getStoredAvatarUrl()
+      pendingGameIdRef.current = gId
+      ;(socket as any)?.emit("player:login", {
+        gameId: gId,
+        data: { username: abbreviateName(name), realName: name, avatarUrl: url },
+      })
+    } else {
+      join(gId)
+    }
+  })
+
+  useEvent("game:successJoin" as any, (gId: string) => {
+    if (!pendingGameIdRef.current) return
+    const name = getStoredName()
+    try { sessionStorage.removeItem("rahoot_streak") } catch {}
+    join(pendingGameIdRef.current)
+    login(abbreviateName(name || ""))
+    setStatus(STATUS.WAIT as any, { text: "Waiting for the game to start..." } as any)
+    pendingGameIdRef.current = null
+    router.replace()
   })
 
   // Custom profile handler (not in typed events yet)

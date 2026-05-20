@@ -113,7 +113,7 @@ const randomSeed = () => Math.random().toString(36).substring(2, 10)
 
 const Username = () => {
   const { socket } = useSocket()
-  const { gameId, login, setStatus } = usePlayerStore()
+  const { gameId, login, setStatus, reset } = usePlayerStore()
   const router = useRouter()
 
   const [storedName, setStoredName] = useState("")
@@ -255,13 +255,14 @@ const Username = () => {
     login(nickname.trim()); router.replace(`/game/${gameId}`)
   })
 
-  if (step === "loading") return null
+  // Navigate to home when Not you? is clicked (store is reset so player=null)
+  useEffect(() => {
+    if (step === "register") router.replace("/")
+  }, [step, router])
 
-  if (step === "register") {
-    // No stored identity — send back to home page to sign in
-    router.replace("/")
-    return null
-  }
+    if (step === "loading") return null
+
+  if (step === "register") return null
 
   return (
     <div className="card-3d z-10 flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6">
@@ -289,7 +290,7 @@ const Username = () => {
           </div>
           <p className="text-sm font-semibold text-gray-700">{storedName}</p>
         </div>
-        <button onClick={() => { setStep("register"); setRealName(""); setLdapUser(""); setLdapPass(""); setAuthError("") }} className="text-[10px] text-primary hover:underline">Not you?</button>
+        <button onClick={() => { try { sessionStorage.removeItem("rahoot_v2_name"); localStorage.removeItem("rahoot_v2_name"); localStorage.removeItem("rahoot_keep_logged") } catch {} reset(); setStep("register"); setRealName(""); setLdapUser(""); setLdapPass(""); setAuthError("") }} className="text-[10px] text-primary hover:underline">Not you?</button>
       </div>
 
       {/* Avatar section */}
