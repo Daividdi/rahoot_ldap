@@ -10,9 +10,10 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import clsx from "clsx"
 
-const STORAGE_KEY = "rahoot_real_name"
-const AVATAR_KEY = "rahoot_avatar_cfg"
-const FAV_3D_KEY = "rahoot_avatar_3d_id"
+const STORAGE_KEY = "rahoot_v2_name"
+const KEEP_KEY    = "rahoot_keep_logged"
+const AVATAR_KEY  = "rahoot_avatar_cfg"
+const FAV_3D_KEY  = "rahoot_avatar_3d_id"
 
 type TierId = "bronze" | "silver" | "gold" | "platinum" | "mythic"
 
@@ -99,7 +100,14 @@ const VRMViewer = dynamic(() => import("@rahoot/web/components/avatar/VRMViewer"
 
 const asset = (rel: string) => `/api/avatar3d/${rel}`
 
-const getStoredName = (): string => { try { return localStorage.getItem(STORAGE_KEY) || "" } catch { return "" } }
+const getStoredName = (): string => {
+  try {
+    const s = sessionStorage.getItem(STORAGE_KEY)
+    if (s) return s
+    if (localStorage.getItem(KEEP_KEY) === "1") return localStorage.getItem(STORAGE_KEY) || ""
+    return ""
+  } catch { return "" }
+}
 const getStoredFav = (): string => { try { return localStorage.getItem(FAV_3D_KEY) || "" } catch { return "" } }
 const saveStoredFav = (id: string) => { try { localStorage.setItem(FAV_3D_KEY, id) } catch {} }
 
