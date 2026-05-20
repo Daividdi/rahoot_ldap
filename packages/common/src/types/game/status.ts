@@ -12,6 +12,7 @@ export const STATUS = {
   FINISHED: "FINISHED",
   WAIT: "WAIT",
   SELECT_TEAM: "SELECT_TEAM",
+  REVIEW_QUESTIONS: "REVIEW_QUESTIONS",
 } as const
 
 export type Status = (typeof STATUS)[keyof typeof STATUS]
@@ -41,6 +42,16 @@ export type CommonStatusDataMap = {
   }
   WAIT: { text: string }
   SELECT_TEAM: { teamA: number; teamB: number }
+  REVIEW_QUESTIONS: {
+    currentIndex: number
+    total: number
+    question: string
+    answers: string[]
+    answerImages?: (string | null)[] | null
+    correct: number | number[]
+    image?: string | null
+    responses: Record<number, number>
+  }
   FINISHED: {
     subject: string
     top: Player[]

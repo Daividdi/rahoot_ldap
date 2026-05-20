@@ -169,6 +169,18 @@ io.on("connection", (socket) => {
     withGame(gameId, socket, (game: any) => game.cancelQuestion(socket, questionIndex)),
   )
 
+  socket.on("manager:nextReviewQuestion", ({ gameId }) =>
+    withGame(gameId, socket, (game: any) => game.nextReviewQuestion(socket)),
+  )
+
+  socket.on("manager:prevReviewQuestion", ({ gameId }) =>
+    withGame(gameId, socket, (game: any) => game.prevReviewQuestion(socket)),
+  )
+
+  socket.on("manager:endReview", ({ gameId }) =>
+    withGame(gameId, socket, (game: any) => game.endReview(socket)),
+  )
+
   // Broadcast emoji reaction from a player to everyone in the game room (manager + all players)
   socket.on("player:fireReaction", ({ gameId, reactionUrl }: any) => {
     if (gameId) {

@@ -8,6 +8,7 @@ import Result from "@rahoot/web/components/game/states/Result"
 import Room from "@rahoot/web/components/game/states/Room"
 import Start from "@rahoot/web/components/game/states/Start"
 import Wait from "@rahoot/web/components/game/states/Wait"
+import ReviewQuestions from "@rahoot/web/components/game/states/ReviewQuestions"
 
 import { STATUS } from "@rahoot/common/types/game/status"
 import Circle from "@rahoot/web/components/icons/Circle"
@@ -42,6 +43,7 @@ export const GAME_STATE_COMPONENTS = {
   [STATUS.SHOW_START]: Start,
   [STATUS.SHOW_RESULT]: Result,
   [STATUS.SHOW_PREPARED]: Prepared,
+  [STATUS.REVIEW_QUESTIONS]: ReviewQuestions,
 }
 
 export const GAME_STATE_COMPONENTS_MANAGER = {
@@ -50,6 +52,7 @@ export const GAME_STATE_COMPONENTS_MANAGER = {
   [STATUS.SHOW_RESPONSES]: Responses,
   [STATUS.SHOW_LEADERBOARD]: Leaderboard,
   [STATUS.FINISHED]: Podium,
+  [STATUS.REVIEW_QUESTIONS]: ReviewQuestions,
 }
 
 export const SFX_ANSWERS_MUSIC = "/sounds/answersMusic.mp3"
@@ -74,4 +77,5 @@ export const MANAGER_SKIP_BTN = {
   [STATUS.FINISHED]: null,
   [STATUS.WAIT]: null,
   [STATUS.SELECT_TEAM]: null,
+  [STATUS.REVIEW_QUESTIONS]: null,
 }

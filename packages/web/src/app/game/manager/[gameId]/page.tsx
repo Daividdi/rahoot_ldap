@@ -14,6 +14,7 @@ import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useManagerStore } from "@rahoot/web/stores/manager"
 import { useQuestionStore } from "@rahoot/web/stores/question"
 import { GAME_STATE_COMPONENTS_MANAGER } from "@rahoot/web/utils/constants"
+import ReviewQuestions from "@rahoot/web/components/game/states/ReviewQuestions"
 import { useParams, useRouter } from "next/navigation"
 import toast from "react-hot-toast"
 
@@ -121,6 +122,10 @@ const ManagerGame = () => {
 
     case STATUS.FINISHED:
       component = <Podium data={status.data} />
+      break
+
+    case STATUS.REVIEW_QUESTIONS:
+      component = <ReviewQuestions data={status.data} isManager />
       break
   }
 

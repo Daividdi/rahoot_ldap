@@ -10,6 +10,7 @@ import Start from "@rahoot/web/components/game/states/Start"
 import Wait from "@rahoot/web/components/game/states/Wait"
 import TeamSelect from "@rahoot/web/components/game/states/TeamSelect"
 import PlayerPodium from "@rahoot/web/components/game/states/PlayerPodium"
+import ReviewQuestions from "@rahoot/web/components/game/states/ReviewQuestions"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
 import { useQuestionStore } from "@rahoot/web/stores/question"
@@ -25,6 +26,7 @@ const PLAYER_STATES = new Set([
   STATUS.SHOW_RESULT,
   STATUS.SHOW_PREPARED,
   STATUS.FINISHED,
+  STATUS.REVIEW_QUESTIONS,
 ])
 
 const Game = () => {
@@ -99,6 +101,9 @@ const Game = () => {
       break
     case STATUS.SELECT_TEAM:
       component = <TeamSelect data={status.data} />
+      break
+    case STATUS.REVIEW_QUESTIONS:
+      component = <ReviewQuestions data={status.data} />
       break
   }
 

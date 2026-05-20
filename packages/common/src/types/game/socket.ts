@@ -75,6 +75,9 @@ export interface ClientToServerEvents {
   "manager:nextQuestion": (_message: MessageGameId) => void
   "manager:showLeaderboard": (_message: MessageGameId) => void
   "manager:cancelQuestion": (_message: { gameId: string; questionIndex: number }) => void
+  "manager:nextReviewQuestion": (_message: MessageGameId) => void
+  "manager:prevReviewQuestion": (_message: MessageGameId) => void
+  "manager:endReview": (_message: MessageGameId) => void
 
   // Player actions
   "player:join": (_inviteCode: string) => void

@@ -12,6 +12,7 @@ const registry = Registry.getInstance()
 type QuestionHistoryEntry = {
   questionIndex: number
   question: string
+  responseCounts: Record<number, number>
   answers: Array<{
     clientId: string
     pointsAwarded: number
@@ -57,6 +58,7 @@ class Game {
 
   questionHistory: QuestionHistoryEntry[]
   cancelledQuestions: Set<number>
+  reviewIndex: number
 
   constructor(io: Server, socket: Socket, quizz: Quizz, mode: "classic" | "team" = "classic") {
     if (!io) {
@@ -96,6 +98,7 @@ class Game {
 
     this.questionHistory = []
     this.cancelledQuestions = new Set()
+    this.reviewIndex = 0
 
     const roomInvite = createInviteCode()
     this.inviteCode = roomInvite
@@ -493,6 +496,7 @@ class Game {
     this.questionHistory.push({
       questionIndex: this.round.currentQuestion,
       question: question.question,
+      responseCounts: totalType,
       answers: sortedPlayers.map((player) => ({
         clientId: player.clientId,
         pointsAwarded: player.lastPoints,
@@ -632,17 +636,8 @@ class Game {
 
     if (isLastRound) {
       this.started = false
-
-      this.broadcastStatus(STATUS.FINISHED, {
-        subject: this.quizz.subject,
-        top: this.leaderboard.slice(0, 3),
-        questions: this.questionHistory.map((qh) => ({
-          title: qh.question,
-          cancelled: false,
-        })),
-        ...(this.mode === "team" ? { teamMode: true, teamScores: this.getTeamScores() } : {}),
-      })
-
+      this.reviewIndex = 0
+      this._sendReviewQuestion()
       return
     }
 
@@ -699,6 +694,50 @@ class Game {
     console.log(
       `Question ${questionIndex + 1} ${this.cancelledQuestions.has(questionIndex) ? "cancelled" : "restored"} in game ${this.inviteCode}`,
     )
+  }
+
+  private _sendReviewQuestion() {
+    const q = this.quizz.questions[this.reviewIndex]
+    const history = this.questionHistory.find(h => h.questionIndex === this.reviewIndex)
+    this.broadcastStatus(STATUS.REVIEW_QUESTIONS, {
+      currentIndex: this.reviewIndex,
+      total: this.quizz.questions.length,
+      question: q.question,
+      answers: q.answers,
+      answerImages: q.answerImages || null,
+      correct: q.solution,
+      image: q.image || null,
+      responses: history?.responseCounts || {},
+    })
+  }
+
+  nextReviewQuestion(socket: Socket) {
+    if (socket.id !== this.manager.id) return
+    if (this.reviewIndex < this.quizz.questions.length - 1) {
+      this.reviewIndex++
+      this._sendReviewQuestion()
+    }
+  }
+
+  prevReviewQuestion(socket: Socket) {
+    if (socket.id !== this.manager.id) return
+    if (this.reviewIndex > 0) {
+      this.reviewIndex--
+      this._sendReviewQuestion()
+    }
+  }
+
+  endReview(socket: Socket) {
+    if (socket.id !== this.manager.id) return
+    this.broadcastStatus(STATUS.FINISHED, {
+      subject: this.quizz.subject,
+      top: this.leaderboard.slice(0, 3),
+      questions: this.questionHistory.map((qh) => ({
+        title: qh.question,
+        cancelled: this.cancelledQuestions.has(qh.questionIndex),
+      })),
+      ...(this.mode === 'team' ? { teamMode: true, teamScores: this.getTeamScores() } : {}),
+    })
   }
 }
 
