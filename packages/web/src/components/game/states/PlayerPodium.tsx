@@ -333,6 +333,10 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
   const [resultsLoading, setResultsLoading]     = useState(false)
   const [showResultsBtn, setShowResultsBtn]     = useState(false)
   const [showResultsPanel, setShowResultsPanel] = useState(false)
+  const [feedbackRating, setFeedbackRating]     = useState(0)
+  const [hoverRating, setHoverRating]           = useState(0)
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [showFeedback, setShowFeedback]         = useState(false)
   const particleCounter = useRef(0)
   const lastReactionAt  = useRef(0)
   const animationDone   = useRef(false)
@@ -363,6 +367,22 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
     const t = setTimeout(() => setShowResultsBtn(true), 5000)
     return () => clearTimeout(t)
   }, [])
+
+  // Show feedback form after podium animation completes (~14 s total)
+  useEffect(() => {
+    const t = setTimeout(() => setShowFeedback(true), 14000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const handleFeedbackSubmit = () => {
+    const rating = feedbackRating || 5
+    if (gameId) (socket as any)?.emit("player:submitFeedback", { gameId, rating })
+    setFeedbackSubmitted(true)
+  }
+
+  const handleFeedbackSkip = () => {
+    setShowFeedback(false)
+  }
 
   // ── Socket: receive full results ─────────────────────────────────────────────
   useEffect(() => {
@@ -539,6 +559,73 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
             <IconTrophy className="h-4 w-4" />
             {resultsLoading && !fullResults ? "Loading..." : "View Results"}
           </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Feedback overlay */}
+      <AnimatePresence>
+        {showFeedback && !feedbackSubmitted && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[210] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="w-full max-w-md rounded-t-3xl bg-gray-900 border border-white/10 px-6 py-8 flex flex-col items-center gap-5 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40">Rate this Quiz</p>
+              <h3 className="text-xl font-bold text-white text-center">{subject}</h3>
+              <div className="flex gap-3">
+                {[1,2,3,4,5].map(star => (
+                  <button
+                    key={star}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onClick={() => setFeedbackRating(star)}
+                    className="transition-transform hover:scale-125 active:scale-110"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-10 w-10 transition-colors" fill={(hoverRating || feedbackRating) >= star ? "#fbbf24" : "none"} stroke={(hoverRating || feedbackRating) >= star ? "#fbbf24" : "#4b5563"} strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm text-white/50 h-5">
+                {(hoverRating || feedbackRating) === 1 && "Poor"}
+                {(hoverRating || feedbackRating) === 2 && "Fair"}
+                {(hoverRating || feedbackRating) === 3 && "Good"}
+                {(hoverRating || feedbackRating) === 4 && "Great"}
+                {(hoverRating || feedbackRating) === 5 && "Excellent!"}
+              </p>
+              <div className="flex w-full gap-3 pt-1">
+                <button onClick={handleFeedbackSkip} className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-semibold text-white/50 hover:bg-white/5 transition-colors">
+                  Skip
+                </button>
+                <button
+                  onClick={handleFeedbackSubmit}
+                  disabled={feedbackRating === 0}
+                  className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:brightness-110 disabled:opacity-40 transition-all"
+                >
+                  Submit
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {showFeedback && feedbackSubmitted && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            className="fixed inset-0 z-[210] flex items-center justify-center pointer-events-none"
+          >
+            <div className="rounded-2xl bg-gray-900/95 border border-white/10 px-8 py-6 text-center shadow-2xl">
+              <div className="text-4xl mb-2">thanks</div>
+              <p className="text-lg font-bold text-white">Thank you for your feedback!</p>
+              <p className="text-sm text-white/50 mt-1">Your rating has been saved.</p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

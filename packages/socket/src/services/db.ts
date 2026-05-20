@@ -118,6 +118,20 @@ CREATE TABLE IF NOT EXISTS solo_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_sa_player_quiz ON solo_attempts(player_id, quiz_id);
 
+CREATE TABLE IF NOT EXISTS quiz_feedback (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  quiz_id          TEXT NOT NULL,
+  game_id          TEXT NOT NULL,
+  player_client_id TEXT NOT NULL,
+  player_name      TEXT,
+  rating           INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+  auto_filled      INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT DEFAULT (datetime('now')),
+  UNIQUE(game_id, player_client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_qf_quiz ON quiz_feedback(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_qf_game ON quiz_feedback(game_id);
+
 CREATE TABLE IF NOT EXISTS meta (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL

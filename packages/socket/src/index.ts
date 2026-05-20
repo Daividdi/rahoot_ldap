@@ -496,6 +496,23 @@ io.on("connection", (socket) => {
           io.to(gid).emit("game:fullResults" as any, payload);
           console.log("Full results broadcast to room " + gid);
         }
+
+        // Backfill 5/5 for players who did not submit feedback
+        try {
+          const mg2 = registry.getGameByManagerSocketId(socket.id);
+          if (mg2) {
+            const gid2 = mg2.gameId;
+            const quizId2 = targetId;
+            const insertFb = db().prepare(
+              "INSERT OR IGNORE INTO quiz_feedback (quiz_id, game_id, player_client_id, player_name, rating, auto_filled) VALUES (?, ?, ?, ?, 5, 1)"
+            );
+            for (const player of (stats as any[])) {
+              const cid = player.clientId || player.client_id || "";
+              if (cid) insertFb.run(quizId2, gid2, cid, player.realName || player.username || "");
+            }
+            console.log("[feedback] backfill done for game " + gid2);
+          }
+        } catch (fbe) { console.error("Feedback backfill error:", fbe); }
       }
     } catch (err) {
       console.error("Error saving session stats:", err);
@@ -597,6 +614,35 @@ io.on("connection", (socket) => {
       callback({ ok: false, error: "Authentication error" })
     }
   })
+
+  // ─── Feedback ────────────────────────────────────────────────────────────────
+  socket.on("player:submitFeedback" as any, ({ gameId, rating }: any) => {
+    try {
+      if (!gameId || !rating || rating < 1 || rating > 5) return;
+      const game = registry.getPlayerGame(gameId, socket.handshake.auth.clientId);
+      const quizId = game?.quizz?.id || "";
+      const player = game?.players?.find((p: any) => p.clientId === socket.handshake.auth.clientId);
+      const playerName = player?.realName || player?.username || "";
+      db().prepare(
+        "INSERT OR REPLACE INTO quiz_feedback (quiz_id, game_id, player_client_id, player_name, rating, auto_filled) VALUES (?, ?, ?, ?, ?, 0)"
+      ).run(quizId, gameId, socket.handshake.auth.clientId, playerName, Math.round(rating));
+      console.log();
+    } catch (err) { console.error("submitFeedback error:", err); }
+  });
+
+  socket.on("manager:getFeedbackStats" as any, ({ quizId }: any) => {
+    try {
+      if (!quizId) return;
+      const rows = db().prepare(
+        "SELECT rating, auto_filled FROM quiz_feedback WHERE quiz_id = ?"
+      ).all(quizId) as Array<{ rating: number; auto_filled: number }>;
+      const total = rows.length;
+      const autoFilled = rows.filter(r => r.auto_filled === 1).length;
+      const avgRating = total > 0 ? +(rows.reduce((s, r) => s + r.rating, 0) / total).toFixed(2) : 0;
+      const dist = [1,2,3,4,5].map(n => ({ rating: n, count: rows.filter(r => r.rating === n).length }));
+      socket.emit("manager:feedbackStats" as any, { quizId, avgRating, total, autoFilled, distribution: dist });
+    } catch (err) { console.error("getFeedbackStats error:", err); }
+  });
 
   socket.on("disconnect", () => {
     console.log(`A user disconnected : ${socket.id}`)
