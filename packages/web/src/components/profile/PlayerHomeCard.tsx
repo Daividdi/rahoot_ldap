@@ -16,6 +16,7 @@ import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react"
 const STORAGE_KEY = "rahoot_v2_name"
 const KEEP_KEY    = "rahoot_keep_logged"
 const AVATAR_KEY  = "rahoot_avatar_cfg"
+const FAV_3D_KEY  = "rahoot_avatar_3d_id"
 
 type TierId = "bronze" | "silver" | "gold" | "platinum" | "mythic"
 
@@ -120,6 +121,8 @@ const buildAvatarUrlFromCfg = (c: AvatarCfg): string => {
 
 const getStoredAvatarUrl = (): string => {
   try {
+    const fav3d = localStorage.getItem(FAV_3D_KEY)
+    if (fav3d) return 
     const raw = localStorage.getItem(AVATAR_KEY)
     if (!raw) return ""
     const cfg = JSON.parse(raw) as AvatarCfg
