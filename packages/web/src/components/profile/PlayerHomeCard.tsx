@@ -122,7 +122,7 @@ const buildAvatarUrlFromCfg = (c: AvatarCfg): string => {
 const getStoredAvatarUrl = (): string => {
   try {
     const fav3d = localStorage.getItem(FAV_3D_KEY)
-    if (fav3d) return 
+    if (fav3d) return `/api/avatar3d/r3/icons/${fav3d}.png`
     const raw = localStorage.getItem(AVATAR_KEY)
     if (!raw) return ""
     const cfg = JSON.parse(raw) as AvatarCfg
