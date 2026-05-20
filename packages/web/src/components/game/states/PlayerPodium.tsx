@@ -339,6 +339,11 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
   const [feedbackRating, setFeedbackRating]     = useState(0)
   const [hoverRating, setHoverRating]           = useState(0)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  useEffect(() => {
+    if (!feedbackSubmitted) return
+    const t = setTimeout(() => setShowFeedback(false), 2500)
+    return () => clearTimeout(t)
+  }, [feedbackSubmitted])
   const [showFeedback, setShowFeedback]         = useState(false)
   const particleCounter = useRef(0)
   const lastReactionAt  = useRef(0)
@@ -371,9 +376,9 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
     return () => clearTimeout(t)
   }, [])
 
-  // Show feedback form after podium animation completes (~14 s total)
+  // Show feedback form immediately so players see it before leaving
   useEffect(() => {
-    const t = setTimeout(() => setShowFeedback(true), 14000)
+    const t = setTimeout(() => setShowFeedback(true), 1500)
     return () => clearTimeout(t)
   }, [])
 
@@ -384,7 +389,8 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
   }
 
   const handleFeedbackSkip = () => {
-    setShowFeedback(false)
+    if (gameId) (socket as any)?.emit(player:submitFeedback, { gameId, rating: 5 })
+    setFeedbackSubmitted(true)
   }
 
   // ── Socket: receive full results ─────────────────────────────────────────────
@@ -578,12 +584,12 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
         {showFeedback && !feedbackSubmitted && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[210] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 backdrop-blur-md"
           >
             <motion.div
-              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="w-full max-w-md rounded-t-3xl bg-gray-900 border border-white/10 px-6 py-8 flex flex-col items-center gap-5 shadow-2xl"
+              initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
+              className="w-full max-w-sm mx-4 rounded-3xl bg-gray-900 border border-white/10 px-6 py-8 flex flex-col items-center gap-5 shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
               <p className="text-xs font-bold uppercase tracking-widest text-white/40">Rate this Quiz</p>
@@ -611,15 +617,15 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
                 {(hoverRating || feedbackRating) === 5 && "Excellent!"}
               </p>
               <div className="flex w-full gap-3 pt-1">
-                <button onClick={handleFeedbackSkip} className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-semibold text-white/50 hover:bg-white/5 transition-colors">
-                  Skip
+                <button onClick={handleFeedbackSkip} className="rounded-lg px-4 py-2 text-xs font-semibold text-white/30 hover:text-white/60 transition-colors">
+                  No rating
                 </button>
                 <button
                   onClick={handleFeedbackSubmit}
                   disabled={feedbackRating === 0}
                   className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:brightness-110 disabled:opacity-40 transition-all"
                 >
-                  Submit
+                  Submit Rating
                 </button>
               </div>
             </motion.div>

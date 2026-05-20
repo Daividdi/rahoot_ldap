@@ -635,8 +635,8 @@ io.on("connection", (socket) => {
       if (!quizId) return;
       const normalizedId = String(quizId).replace(/\.json$/i, "");
       const rows = db().prepare(
-        "SELECT rating, auto_filled FROM quiz_feedback WHERE REPLACE(quiz_id, .json, ) = ?"
-      ).all(normalizedId) as Array<{ rating: number; auto_filled: number }>;
+        "SELECT rating, auto_filled FROM quiz_feedback WHERE quiz_id = ? OR quiz_id = ?"
+      ).all(normalizedId, normalizedId + ".json") as Array<{ rating: number; auto_filled: number }>;
       const total = rows.length;
       const autoFilled = rows.filter(r => r.auto_filled === 1).length;
       const avgRating = total > 0 ? +(rows.reduce((s, r) => s + r.rating, 0) / total).toFixed(2) : 0;
