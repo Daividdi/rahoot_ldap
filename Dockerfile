@@ -1,7 +1,7 @@
 FROM node:22-alpine AS base
 
 # Enable and prepare pnpm via Corepack
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # ----- DEPENDENCIES -----
 FROM base AS deps
@@ -23,7 +23,7 @@ WORKDIR /app
 COPY . .
 
 # Install all dependencies (including dev) for build
-RUN pnpm config set allow-build core-js,esbuild,sharp,unrs-resolver && pnpm install --no-frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Build Next.js app with standalone output for smaller runtime image
 WORKDIR /app/packages/web
@@ -46,7 +46,7 @@ RUN adduser --system --uid 1001 nodejs
 
 
 # Enable pnpm in the runtime image
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy configuration files
 COPY pnpm-workspace.yaml package.json ./
