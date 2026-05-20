@@ -195,7 +195,7 @@ const PlayerHomeCard = () => {
     login(abbreviateName(name || ""))
     setStatus(STATUS.WAIT as any, { text: "Waiting for the game to start..." } as any)
     pendingGameIdRef.current = null
-    router.replace()
+    router.replace(`/game/${gId}`)
   })
 
   // Custom profile handler (not in typed events yet)
