@@ -502,7 +502,7 @@ io.on("connection", (socket) => {
           const mg2 = registry.getGameByManagerSocketId(socket.id);
           if (mg2) {
             const gid2 = mg2.gameId;
-            const quizId2 = targetId;
+            const quizId2 = targetId.replace(/\.json$/i, "");
             const insertFb = db().prepare(
               "INSERT OR IGNORE INTO quiz_feedback (quiz_id, game_id, player_client_id, player_name, rating, auto_filled) VALUES (?, ?, ?, ?, 5, 1)"
             );
@@ -620,7 +620,7 @@ io.on("connection", (socket) => {
     try {
       if (!gameId || !rating || rating < 1 || rating > 5) return;
       const game = registry.getPlayerGame(gameId, socket.handshake.auth.clientId);
-      const quizId = game?.quizz?.id || "";
+      const quizId = (game?.quizz?.id || "").replace(/\.json$/i, "");
       const player = game?.players?.find((p: any) => p.clientId === socket.handshake.auth.clientId);
       const playerName = player?.realName || player?.username || "";
       db().prepare(
@@ -633,9 +633,10 @@ io.on("connection", (socket) => {
   socket.on("manager:getFeedbackStats" as any, ({ quizId }: any) => {
     try {
       if (!quizId) return;
+      const normalizedId = String(quizId).replace(/\.json$/i, "");
       const rows = db().prepare(
-        "SELECT rating, auto_filled FROM quiz_feedback WHERE quiz_id = ?"
-      ).all(quizId) as Array<{ rating: number; auto_filled: number }>;
+        "SELECT rating, auto_filled FROM quiz_feedback WHERE REPLACE(quiz_id, .json, ) = ?"
+      ).all(normalizedId) as Array<{ rating: number; auto_filled: number }>;
       const total = rows.length;
       const autoFilled = rows.filter(r => r.auto_filled === 1).length;
       const avgRating = total > 0 ? +(rows.reduce((s, r) => s + r.rating, 0) / total).toFixed(2) : 0;
