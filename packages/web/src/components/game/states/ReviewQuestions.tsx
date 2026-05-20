@@ -3,7 +3,7 @@ import { CommonStatusDataMap } from "@rahoot/common/types/game/status"
 import { ANSWERS_COLORS, ANSWERS_ICONS } from "@rahoot/web/utils/constants"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useManagerStore } from "@rahoot/web/stores/manager"
-import { CheckCircle } from "lucide-react"
+import CricleCheck from "@rahoot/web/components/icons/CricleCheck"
 import clsx from "clsx"
 import { calculatePercentages } from "@rahoot/web/utils/score"
 
@@ -65,7 +65,7 @@ const ReviewQuestions = ({ data, isManager = false }: Props) => {
                   )}
                   {answer}
                 </span>
-                {isCorrect && <CheckCircle className="h-5 w-5 shrink-0 text-green-300" />}
+                {isCorrect && <CricleCheck className="h-5 w-5 shrink-0" />}
               </div>
               {/* Response bar */}
               <div className="flex items-center gap-2">
