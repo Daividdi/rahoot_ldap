@@ -180,11 +180,11 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe, p
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: spring, stiffness: 400, damping: 18, delay: 0.45 }}
-          className=flex items-center gap-2 rounded-full bg-yellow-500/20 border border-yellow-400/30 px-5 py-2
+          transition={{ type: "spring", stiffness: 400, damping: 18, delay: 0.45 }}
+          className="flex items-center gap-2 rounded-full bg-yellow-500/20 border border-yellow-400/30 px-5 py-2"
         >
-          <span className=text-2xl font-black text-yellow-300>{partial.got}/{partial.total}</span>
-          <span className=text-sm font-semibold text-yellow-300/70>correct answers</span>
+          <span className="text-2xl font-black text-yellow-300">{partial.got}/{partial.total}</span>
+          <span className="text-sm font-semibold text-yellow-300/70">correct answers</span>
         </motion.div>
       )}
 
