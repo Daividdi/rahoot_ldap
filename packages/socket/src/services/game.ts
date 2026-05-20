@@ -442,6 +442,7 @@ class Game {
         let isCorrect: boolean
         let points: number
 
+        let partialInfo: { got: number; total: number } | undefined
         if (playerAnswer) {
           if (isMultiple) {
             const solution = question.solution as number[]
@@ -451,6 +452,7 @@ class Game {
             const ratio = Math.max(0, (correctSelected - wrongSelected) / solution.length)
             points = ratio > 0 ? Math.round(playerAnswer.points * ratio) : 0
             isCorrect = ratio === 1
+            if (ratio > 0 && ratio < 1) partialInfo = { got: correctSelected, total: solution.length }
           } else {
             isCorrect = playerAnswer.answerId === question.solution
             points = isCorrect ? Math.round(playerAnswer.points) : 0
@@ -488,7 +490,7 @@ class Game {
         })
         // Fim da Injeção Analítica
 
-        return { ...player, lastCorrect: isCorrect, lastPoints: points }
+        return { ...player, lastCorrect: isCorrect, lastPoints: points, lastPartialInfo: partialInfo }
       })
       .sort((a, b) => b.points - a.points)
 
@@ -518,6 +520,7 @@ class Game {
         myPoints: player.points,
         rank,
         aheadOfMe: aheadPlayer ? aheadPlayer.username : null,
+        partial: (player as any).lastPartialInfo,
       })
     })
 

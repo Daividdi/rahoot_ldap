@@ -60,7 +60,7 @@ const StreakBadge = ({ streak }: { streak: number }) => {
   )
 }
 
-const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } }: Props) => {
+const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe, partial } }: Props) => {
   const player = usePlayerStore()
   const { socket } = useSocket()
   const [correctAnswer, setCorrectAnswer] = useState<CorrectAnswerData | null>(null)
@@ -75,14 +75,14 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
     player.updatePoints(myPoints)
     sfxResults()
     const prev = getStreak()
-    const next = correct ? prev + 1 : 0
+    const next = (correct && !partial) ? prev + 1 : 0
     saveStreak(next)
     setStreak(next)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Count-up for points
   useEffect(() => {
-    if (!correct || !points) return
+    if ((!correct && !partial) || !points) return
     let current = 0
     const step = Math.max(1, Math.ceil(points / 24))
     const timer = setInterval(() => {
@@ -100,7 +100,8 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
     return () => { socket.off("game:correctAnswer" as any, handler) }
   }, [socket])
 
-  const headline = correct ? "Correct!" : "Wrong!"
+  const isPartial = !!partial
+  const headline = isPartial ? "Partial!" : correct ? "Correct!" : "Wrong!"
   const streakMsg = correct ? getStreakMsg(streak) : null
 
   const rankLabel = rank === 1 ? "1st 🥇" : rank === 2 ? "2nd 🥈" : rank === 3 ? "3rd 🥉" : `${rank}th`
@@ -115,10 +116,12 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
         transition={{ type: "spring", stiffness: 350, damping: 18 }}
         className={clsx(
           "flex h-28 w-28 items-center justify-center rounded-full shadow-2xl ring-4",
-          correct ? "bg-green-500/20 ring-green-400/40" : "bg-red-500/20 ring-red-400/40"
+          isPartial ? "bg-yellow-500/20 ring-yellow-400/40" : correct ? "bg-green-500/20 ring-green-400/40" : "bg-red-500/20 ring-red-400/40"
         )}
       >
-        {correct ? (
+        {isPartial ? (
+          <svg viewBox="0 0 56 56" className="h-16 w-16 fill-yellow-400 drop-shadow-lg"><path d="M28 52C41.255 52 52 41.255 52 28C52 14.745 41.255 4 28 4C14.745 4 4 14.745 4 28C4 41.255 14.745 52 28 52ZM24.766 40.023C23.969 40.023 23.359 39.672 22.68 38.875L15.93 30.531C15.578 30.086 15.367 29.523 15.367 29.008C15.367 27.906 16.234 27.063 17.266 27.063C17.945 27.063 18.508 27.32 19.07 28.047L24.672 35.289L35.570 17.828C36.016 17.102 36.625 16.75 37.234 16.75C38.266 16.75 39.273 17.43 39.273 18.555C39.273 19.07 38.969 19.633 38.664 20.102L26.758 38.875C26.242 39.648 25.586 40.023 24.766 40.023Z" /></svg>
+        ) : correct ? (
           <svg viewBox="0 0 56 56" className="h-16 w-16 fill-green-400 drop-shadow-lg">
             <path d="M28 52C41.255 52 52 41.255 52 28C52 14.745 41.255 4 28 4C14.745 4 4 14.745 4 28C4 41.255 14.745 52 28 52ZM24.766 40.023C23.969 40.023 23.359 39.672 22.68 38.875L15.93 30.531C15.578 30.086 15.367 29.523 15.367 29.008C15.367 27.906 16.234 27.063 17.266 27.063C17.945 27.063 18.508 27.32 19.07 28.047L24.672 35.289L35.570 17.828C36.016 17.102 36.625 16.75 37.234 16.75C38.266 16.75 39.273 17.43 39.273 18.555C39.273 19.07 38.969 19.633 38.664 20.102L26.758 38.875C26.242 39.648 25.586 40.023 24.766 40.023Z" />
           </svg>
@@ -158,7 +161,7 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
 
       {/* Points badge */}
       <AnimatePresence>
-        {correct && (
+        {(correct || isPartial) && (
           <motion.div
             initial={{ scale: 0, y: 12 }}
             animate={{ scale: 1, y: 0 }}
@@ -171,6 +174,19 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Partial ratio badge */}
+      {isPartial && partial && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: spring, stiffness: 400, damping: 18, delay: 0.45 }}
+          className=flex items-center gap-2 rounded-full bg-yellow-500/20 border border-yellow-400/30 px-5 py-2
+        >
+          <span className=text-2xl font-black text-yellow-300>{partial.got}/{partial.total}</span>
+          <span className=text-sm font-semibold text-yellow-300/70>correct answers</span>
+        </motion.div>
+      )}
 
       {/* Rank */}
       <motion.div

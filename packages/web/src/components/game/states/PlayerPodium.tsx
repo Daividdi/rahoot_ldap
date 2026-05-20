@@ -542,7 +542,7 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex justify-center pb-4 pt-2 bg-gradient-to-t from-black/40 to-transparent pointer-events-none">
         <motion.div initial={{ opacity: 0, y: 30, scale: 0.85 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ delay: 2, type: "spring", stiffness: 260, damping: 22 }}
-          className="pointer-events-auto flex gap-3 rounded-2xl bg-black/60 backdrop-blur-md px-5 py-3 shadow-2xl border border-white/10">
+          className="pointer-events-auto flex flex-wrap justify-center gap-2 rounded-2xl bg-black/60 backdrop-blur-md px-4 py-3 shadow-2xl border border-white/10 max-w-xs sm:max-w-none">
           {REACTIONS.map(r => (
             <motion.button key={r.id} whileHover={{ scale: 1.18 }} whileTap={{ scale: 0.84 }}
               onClick={() => fireReaction(r)}
@@ -632,7 +632,8 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
             className="fixed inset-0 z-[210] flex items-center justify-center pointer-events-none"
           >
             <div className="rounded-2xl bg-gray-900/95 border border-white/10 px-8 py-6 text-center shadow-2xl">
-              <div className="text-4xl mb-2">thanks</div>
+              <div className="text-5xl mb-2">🎉</div>
+              <p className="text-xl font-black text-white">Thank You!</p>
               <p className="text-lg font-bold text-white">Thank you for your feedback!</p>
               <p className="text-sm text-white/50 mt-1">Your rating has been saved.</p>
             </div>

@@ -39,6 +39,7 @@ export type CommonStatusDataMap = {
     myPoints: number
     rank: number
     aheadOfMe: string | null
+    partial?: { got: number; total: number }
   }
   WAIT: { text: string }
   SELECT_TEAM: { teamA: number; teamB: number }
