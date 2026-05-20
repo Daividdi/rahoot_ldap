@@ -17,7 +17,7 @@ type CorrectAnswerData = {
   question: string
   answers: string[]
   answerImages?: (string | null)[]
-  correct: number
+  correct: number | number[]
 }
 
 // ── Streak helpers ──────────────────────────────────────────────────────────
@@ -204,14 +204,32 @@ const Result = ({ data: { correct, message, points, myPoints, rank, aheadOfMe } 
               Correct answer
             </p>
             <div className="rounded-xl border border-green-400/30 bg-green-500/15 px-4 py-4 text-center backdrop-blur-sm flex flex-col items-center gap-2">
-              {correctAnswer.answerImages?.[correctAnswer.correct] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={correctAnswer.answerImages[correctAnswer.correct]!} alt="" className="max-h-28 w-auto rounded-lg object-contain border border-white/20" />
-              )}
-              {correctAnswer.answers[correctAnswer.correct] && (
-                <p className="text-lg font-bold text-green-300">
-                  {correctAnswer.answers[correctAnswer.correct]}
-                </p>
+              {Array.isArray(correctAnswer.correct) ? (
+                <div className="flex flex-wrap justify-center gap-2">
+                  {correctAnswer.correct.map((ci) => (
+                    <div key={ci} className="flex flex-col items-center gap-1">
+                      {correctAnswer.answerImages?.[ci] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={correctAnswer.answerImages[ci]!} alt="" className="max-h-20 w-auto rounded-lg object-contain border border-white/20" />
+                      )}
+                      {correctAnswer.answers[ci] && (
+                        <p className="text-base font-bold text-green-300">{correctAnswer.answers[ci]}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {correctAnswer.answerImages?.[correctAnswer.correct] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={correctAnswer.answerImages[correctAnswer.correct as number]!} alt="" className="max-h-28 w-auto rounded-lg object-contain border border-white/20" />
+                  )}
+                  {correctAnswer.answers[correctAnswer.correct as number] && (
+                    <p className="text-lg font-bold text-green-300">
+                      {correctAnswer.answers[correctAnswer.correct as number]}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </motion.div>

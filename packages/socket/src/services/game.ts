@@ -436,15 +436,26 @@ class Game {
         )
 
         const isMultiple = Array.isArray(question.solution)
-        const isCorrect = playerAnswer
-          ? isMultiple
-            ? Array.isArray(playerAnswer.answerId) &&
-              [...playerAnswer.answerId].sort().join(",") === [...(question.solution as number[])].sort().join(",")
-            : playerAnswer.answerId === question.solution
-          : false
+        let isCorrect: boolean
+        let points: number
 
-        const points =
-          playerAnswer && isCorrect ? Math.round(playerAnswer.points) : 0
+        if (playerAnswer) {
+          if (isMultiple) {
+            const solution = question.solution as number[]
+            const selected = Array.isArray(playerAnswer.answerId) ? [...playerAnswer.answerId] : [playerAnswer.answerId as number]
+            const correctSelected = selected.filter((id) => solution.includes(id)).length
+            const wrongSelected = selected.filter((id) => !solution.includes(id)).length
+            const ratio = Math.max(0, (correctSelected - wrongSelected) / solution.length)
+            points = ratio > 0 ? Math.round(playerAnswer.points * ratio) : 0
+            isCorrect = ratio === 1
+          } else {
+            isCorrect = playerAnswer.answerId === question.solution
+            points = isCorrect ? Math.round(playerAnswer.points) : 0
+          }
+        } else {
+          isCorrect = false
+          points = 0
+        }
 
         player.points += points
 
@@ -497,8 +508,8 @@ class Game {
       const aheadPlayer = sortedPlayers[index - 1]
 
       this.sendStatus(player.id, STATUS.SHOW_RESULT, {
-        correct: player.lastCorrect,
-        message: player.lastCorrect ? "Nice!" : "Too bad",
+        correct: player.lastPoints > 0,
+        message: player.lastCorrect ? "Nice!" : player.lastPoints > 0 ? "Partial!" : "Too bad",
         points: player.lastPoints,
         myPoints: player.points,
         rank,
