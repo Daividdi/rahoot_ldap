@@ -60,6 +60,10 @@ class Game {
   cancelledQuestions: Set<number>
   reviewIndex: number
 
+  autoPlay: boolean
+  autoPlayDelay: number
+  private _autoTimer: ReturnType<typeof setInterval> | null
+
   constructor(io: Server, socket: Socket, quizz: Quizz, mode: "classic" | "team" = "classic") {
     if (!io) {
       throw new Error("Socket server not initialized")
@@ -99,6 +103,10 @@ class Game {
     this.questionHistory = []
     this.cancelledQuestions = new Set()
     this.reviewIndex = 0
+
+    this.autoPlay = false
+    this.autoPlayDelay = 5
+    this._autoTimer = null
 
     const roomInvite = createInviteCode()
     this.inviteCode = roomInvite
@@ -545,6 +553,10 @@ class Game {
     this.tempOldLeaderboard = oldLeaderboard
 
     this.round.playersAnswers = []
+
+    if (this.autoPlay) {
+      this._scheduleAuto("leaderboard", () => this.showLeaderboard())
+    }
   }
 
   getTeamCounts() {
@@ -605,6 +617,7 @@ class Game {
   }
 
   nextRound(socket: Socket) {
+    this._clearAutoTimer()
     if (!this.started) {
       return
     }
@@ -634,6 +647,7 @@ class Game {
   }
 
   showLeaderboard() {
+    this._clearAutoTimer()
     const isLastRound =
       this.round.currentQuestion + 1 === this.quizz.questions.length
 
@@ -659,6 +673,10 @@ class Game {
     })
 
     this.tempOldLeaderboard = null
+
+    if (this.autoPlay) {
+      this._scheduleAuto("nextQuestion", () => this._doNextRound())
+    }
   }
 
   cancelQuestion(socket: Socket, questionIndex: number) {
@@ -712,9 +730,22 @@ class Game {
       image: q.image || null,
       responses: history?.responseCounts || {},
     })
+
+    if (this.autoPlay) {
+      const isLastReview = this.reviewIndex >= this.quizz.questions.length - 1
+      if (isLastReview) {
+        this._scheduleAuto("endReview", () => this._doEndReview())
+      } else {
+        this._scheduleAuto("nextReview", () => {
+          this.reviewIndex++
+          this._sendReviewQuestion()
+        })
+      }
+    }
   }
 
   nextReviewQuestion(socket: Socket) {
+    this._clearAutoTimer()
     if (socket.id !== this.manager.id) return
     if (this.reviewIndex < this.quizz.questions.length - 1) {
       this.reviewIndex++
@@ -723,6 +754,7 @@ class Game {
   }
 
   prevReviewQuestion(socket: Socket) {
+    this._clearAutoTimer()
     if (socket.id !== this.manager.id) return
     if (this.reviewIndex > 0) {
       this.reviewIndex--
@@ -731,7 +763,60 @@ class Game {
   }
 
   endReview(socket: Socket) {
+    this._clearAutoTimer()
     if (socket.id !== this.manager.id) return
+    this.broadcastStatus(STATUS.FINISHED, {
+      subject: this.quizz.subject,
+      top: this.leaderboard.slice(0, 3),
+      questions: this.questionHistory.map((qh) => ({
+        title: qh.question,
+        cancelled: this.cancelledQuestions.has(qh.questionIndex),
+      })),
+      ...(this.mode === 'team' ? { teamMode: true, teamScores: this.getTeamScores() } : {}),
+    })
+  }
+
+  private _clearAutoTimer() {
+    if (this._autoTimer) {
+      clearInterval(this._autoTimer)
+      this._autoTimer = null
+      this.io.to(this.gameId).emit("game:autoPlayCountdown" as any, { remaining: 0, action: null })
+    }
+  }
+
+  private _scheduleAuto(action: string, fn: () => void) {
+    this._clearAutoTimer()
+    let count = this.autoPlayDelay
+    this.io.to(this.gameId).emit("game:autoPlayCountdown" as any, { remaining: count, action })
+    this._autoTimer = setInterval(() => {
+      count--
+      if (count <= 0) {
+        this._clearAutoTimer()
+        fn()
+      } else {
+        this.io.to(this.gameId).emit("game:autoPlayCountdown" as any, { remaining: count, action })
+      }
+    }, 1000)
+  }
+
+  setAutoPlay(enabled: boolean) {
+    this.autoPlay = enabled
+    if (!enabled) this._clearAutoTimer()
+    this.io.to(this.gameId).emit("game:autoPlay" as any, { enabled })
+  }
+
+  cancelAutoPlay() {
+    this._clearAutoTimer()
+  }
+
+  private _doNextRound() {
+    if (!this.started) return
+    if (!this.quizz.questions[this.round.currentQuestion + 1]) return
+    this.round.currentQuestion += 1
+    this.newRound()
+  }
+
+  private _doEndReview() {
     this.broadcastStatus(STATUS.FINISHED, {
       subject: this.quizz.subject,
       top: this.leaderboard.slice(0, 3),

@@ -1,5 +1,5 @@
 "use client"
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { STATUS } from "@rahoot/common/types/game/status"
 import GameWrapper from "@rahoot/web/components/game/GameWrapper"
 import Answers from "@rahoot/web/components/game/states/Answers"
@@ -25,6 +25,8 @@ const ManagerGame = () => {
   const { gameId, status, setGameId, setStatus, setPlayers, reset } =
     useManagerStore()
   const { setQuestionStates } = useQuestionStore()
+  const [autoPlay, setAutoPlay] = useState(false)
+  const [countdown, setCountdown] = useState<{ remaining: number; action: string | null } | null>(null)
 
   useEffect(() => {
     if (socket) {
@@ -64,6 +66,21 @@ const ManagerGame = () => {
     setQuestionStates(null)
     toast.error(message)
   })
+
+  useEvent("game:autoPlay" as any, ({ enabled }: any) => {
+    setAutoPlay(enabled)
+  })
+
+  useEvent("game:autoPlayCountdown" as any, ({ remaining, action }: any) => {
+    setCountdown(remaining > 0 ? { remaining, action } : null)
+  })
+
+  const toggleAutoPlay = () => {
+    if (!gameId) return
+    const next = !autoPlay
+    socket?.emit("manager:setAutoPlay" as any, { gameId, enabled: next })
+    setAutoPlay(next)
+  }
 
   const handleSkip = () => {
     if (!gameId) {
@@ -130,8 +147,7 @@ const ManagerGame = () => {
   }
 
   return (
-    <GameWrapper statusName={status?.name} onNext={handleSkip} manager>
-      {/* O botão verde foi completamente removido daqui. Apenas o jogo é renderizado agora! */}
+    <GameWrapper statusName={status?.name} onNext={handleSkip} manager autoPlay={autoPlay} countdown={countdown} onToggleAutoPlay={status?.name !== STATUS.FINISHED ? toggleAutoPlay : undefined}>
       {component}
     </GameWrapper>
   )

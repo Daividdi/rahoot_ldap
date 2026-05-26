@@ -16,9 +16,12 @@ type Props = PropsWithChildren & {
   statusName: Status | undefined
   onNext?: () => void
   manager?: boolean
+  autoPlay?: boolean
+  countdown?: { remaining: number; action: string | null } | null
+  onToggleAutoPlay?: () => void
 }
 
-const GameWrapper = ({ children, statusName, onNext, manager }: Props) => {
+const GameWrapper = ({ children, statusName, onNext, manager, autoPlay, countdown, onToggleAutoPlay }: Props) => {
   const { isConnected } = useSocket()
   const { player } = usePlayerStore()
   const { questionStates, setQuestionStates } = useQuestionStore()
@@ -67,15 +70,37 @@ const GameWrapper = ({ children, statusName, onNext, manager }: Props) => {
               <div />
             )}
 
-            {manager && next && (
-              <Button
-                className={clsx("self-end bg-white/15 backdrop-blur-sm px-5 text-white border border-white/20 hover:bg-white/25!", {
-                  "pointer-events-none opacity-60": isDisabled,
-                })}
-                onClick={handleNext}
-              >
-                {next}
-              </Button>
+            {manager && (
+              <div className="flex items-center gap-2">
+                {countdown && countdown.remaining > 0 && (
+                  <div className="flex items-center gap-1 rounded-full bg-black/50 backdrop-blur-sm px-3 py-1.5 text-sm font-bold text-white shadow-md tabular-nums">
+                    <span className="text-yellow-300">{countdown.remaining}s</span>
+                  </div>
+                )}
+                {onToggleAutoPlay && (
+                  <button
+                    onClick={onToggleAutoPlay}
+                    className={clsx(
+                      "rounded-full px-4 py-2 text-sm font-bold border transition-colors",
+                      autoPlay
+                        ? "bg-yellow-400/90 border-yellow-300 text-gray-900"
+                        : "bg-white/15 backdrop-blur-sm border-white/20 text-white hover:bg-white/25",
+                    )}
+                  >
+                    {autoPlay ? "⏸ Auto" : "▶ Auto"}
+                  </button>
+                )}
+                {next && (
+                  <Button
+                    className={clsx("self-end bg-white/15 backdrop-blur-sm px-5 text-white border border-white/20 hover:bg-white/25!", {
+                      "pointer-events-none opacity-60": isDisabled,
+                    })}
+                    onClick={handleNext}
+                  >
+                    {next}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 

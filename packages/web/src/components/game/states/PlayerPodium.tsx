@@ -42,9 +42,9 @@ const REACTIONS = [
   { id: "clap",  url: "/emojis/clap.png",  label: "Applause", bg: "bg-amber-500/80",  activeBg: "bg-amber-500"  },
   { id: "laugh", url: "/emojis/laugh.png", label: "Laugh",    bg: "bg-yellow-400/80", activeBg: "bg-yellow-400" },
   { id: "wow",   url: "/emojis/wow.png",   label: "Wow",      bg: "bg-blue-500/80",   activeBg: "bg-blue-500"   },
-  { id: "br",    url: "🇧🇷",               label: "Brazil",   bg: "bg-green-700/80",  activeBg: "bg-green-700"  },
-  { id: "my",    url: "🇲🇾",               label: "Malaysia",  bg: "bg-red-700/80",    activeBg: "bg-red-700"    },
-  { id: "cn",    url: "🇨🇳",               label: "China",    bg: "bg-red-800/80",    activeBg: "bg-red-800"    },
+  { id: "br",    url: "/emojis/flag-br.png", label: "Brazil",   bg: "bg-green-700/80",  activeBg: "bg-green-700"  },
+  { id: "my",    url: "/emojis/flag-my.png", label: "Malaysia", bg: "bg-red-700/80",    activeBg: "bg-red-700"    },
+  { id: "cn",    url: "/emojis/flag-cn.png", label: "China",    bg: "bg-red-800/80",    activeBg: "bg-red-800"    },
 ]
 
 type Particle = { id: number; url: string; x: number; size: number; drift: number }

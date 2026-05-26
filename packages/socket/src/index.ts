@@ -181,6 +181,14 @@ io.on("connection", (socket) => {
     withGame(gameId, socket, (game: any) => game.endReview(socket)),
   )
 
+  socket.on("manager:setAutoPlay", ({ gameId, enabled }: any) =>
+    withGame(gameId, socket, (game: any) => game.setAutoPlay(enabled)),
+  )
+
+  socket.on("manager:cancelAutoPlay", ({ gameId }: any) =>
+    withGame(gameId, socket, (game: any) => game.cancelAutoPlay()),
+  )
+
   // Broadcast emoji reaction from a player to everyone in the game room (manager + all players)
   socket.on("player:fireReaction", ({ gameId, reactionUrl }: any) => {
     if (gameId) {
