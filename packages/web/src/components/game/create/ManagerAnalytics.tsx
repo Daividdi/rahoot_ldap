@@ -9,11 +9,12 @@ import SelectQuizz from "@rahoot/web/components/game/create/SelectQuizz"
 import ManagerPlayers from "@rahoot/web/components/game/create/ManagerPlayers"
 import Image from "next/image"
 import logo from "@rahoot/web/assets/logo.svg"
+import { APP_VERSION } from "@rahoot/web/version"
 
 type Props = { quizzList: any[]; initialRegion?: "all" | "BR" | "MY" | "CN"; onSelect?: (_id: string) => void; onListChange?: (newList: any[]) => void }
 type RFilter = "all" | "BR" | "MY" | "CN"
 type PFilter = "all" | "month" | "week"
-type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team" | "solo" | "combined" | "team_games"
+type NavView = "overview" | "players" | "leaderboard" | "participation" | "activity" | "quizzes" | "team" | "solo" | "combined" | "team_games" | "question_bank"
 
 const EXCLUDED_PLAYERS = ["test user"]
 const isExcluded = (name: string) => {
@@ -153,6 +154,16 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [teamExpandedPlayer, setTeamExpandedPlayer] = useState<string | null>(null)
   const [combinedSort, setCombinedSort] = useState<"name" | "solo_acc" | "team_acc" | "solo_games" | "team_games">("name")
 
+  type DiffQuestion = { questionTitle: string; quizCount: number; timesAnswered: number; timesCorrect: number; timesWrong: number; errorRate: number }
+  const [diffQuestions, setDiffQuestions] = useState<DiffQuestion[] | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [bankTitle, setBankTitle] = useState("Question Bank")
+  const [bankSelected, setBankSelected] = useState<Set<string>>(new Set())
+  const [bankSaving, setBankSaving] = useState(false)
+  const [bankSaved, setBankSaved] = useState<string | null>(null)
+  const [bankMinError, setBankMinError] = useState(0)
+  const [showBelow50, setShowBelow50] = useState(false)
+
   useEffect(() => {
     if (!socket) return
     ;(socket as any).emit("manager:getPlayerNames", (data: Record<string, string>) => {
@@ -174,6 +185,33 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     fetchSoloReport()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket])
+
+  const fetchDiffQuestions = () => {
+    if (!socket) return
+    setDiffLoading(true)
+    ;(socket as any).timeout(20000).emit("manager:getDifficultQuestions", (err: any, data: any) => {
+      setDiffLoading(false)
+      if (!err && data?.ok) setDiffQuestions(data.questions)
+    })
+  }
+
+  useEffect(() => {
+    if (!socket || diffQuestions !== null) return
+    fetchDiffQuestions()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket])
+
+  const saveBankQuiz = () => {
+    if (!socket || bankSelected.size === 0) return
+    setBankSaving(true)
+    ;(socket as any).timeout(15000).emit("manager:saveQuestionBank",
+      { title: bankTitle, questionTitles: Array.from(bankSelected) },
+      (err: any, data: any) => {
+        setBankSaving(false)
+        if (!err && data?.ok) { setBankSaved(data.quizId); setBankSelected(new Set()) }
+      }
+    )
+  }
 
   const applyName = (key: string, fallback: string) =>
     nameCorrections[key] || fallback
@@ -201,9 +239,25 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [activeView, setActiveView] = useState<NavView>("overview")
   const [rFilter, setRFilter] = useState<RFilter>(initialRegion as RFilter)
   const [pFilter, setPFilter] = useState<PFilter>("all")
+  const [pOffset, setPOffset] = useState(0)
   const [aFilter, setAFilter] = useState("all")
 
   useEffect(() => { setRFilter(initialRegion as RFilter) }, [initialRegion])
+
+  const pLabel = useMemo(() => {
+    const mn = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    if (pFilter === "month") {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + pOffset)
+      return `${mn[d.getMonth()]} ${d.getFullYear()}`
+    }
+    if (pFilter === "week") {
+      const d = new Date(); const dow = d.getDay()
+      d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1) + pOffset * 7); d.setHours(0,0,0,0)
+      const end = new Date(d); end.setDate(end.getDate() + 6)
+      return `${mn[d.getMonth()]} ${d.getDate()} – ${mn[end.getMonth()]} ${end.getDate()}`
+    }
+    return "All time"
+  }, [pFilter, pOffset])
 
   const data = useMemo(() => {
     try {
@@ -234,15 +288,17 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       if (rFilter !== "all") list = list.filter(q => q.region === rFilter)
       if (aFilter !== "all") list = list.filter(q => q.createdBy === aFilter)
       if (pFilter === "month") {
-        const now = new Date()
-        list = list.filter(q => q.date && q.date.getMonth() === now.getMonth() && q.date.getFullYear() === now.getFullYear())
+        const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + pOffset)
+        list = list.filter(q => { const qd = q.playedDate || q.date; return qd && qd.getMonth() === d.getMonth() && qd.getFullYear() === d.getFullYear() })
       } else if (pFilter === "week") {
-        const wa = new Date(); wa.setDate(wa.getDate() - 7)
-        list = list.filter(q => q.date && q.date >= wa)
+        const ws = new Date(); const dow = ws.getDay()
+        ws.setDate(ws.getDate() - (dow === 0 ? 6 : dow - 1) + pOffset * 7); ws.setHours(0,0,0,0)
+        const we = new Date(ws); we.setDate(we.getDate() + 7)
+        list = list.filter(q => { const qd = q.playedDate || q.date; return qd && qd >= ws && qd < we })
       }
       return list
     } catch { return data }
-  }, [data, rFilter, pFilter, aFilter])
+  }, [data, rFilter, pFilter, pOffset, aFilter])
 
   const metrics = useMemo(() => {
     try {
@@ -261,11 +317,40 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         total: filtered.length, questions: filtered.reduce((a, q) => a + q.questions.length, 0),
         sessions: played.length, players: tp, unique: up.size, creators: cr.size,
         acc: ta > 0 ? Math.round(tc / ta * 100) : 0,
+        totalCorrect: tc, totalAnswers: ta,
         avgP: played.length > 0 ? Math.round(tp / played.length * 10) / 10 : 0,
         avgD: played.length > 0 ? Math.round(tt / played.length / 60 * 10) / 10 : 0,
       }
-    } catch { return { total: 0, questions: 0, sessions: 0, players: 0, unique: 0, creators: 0, acc: 0, avgP: 0, avgD: 0 } }
+    } catch { return { total: 0, questions: 0, sessions: 0, players: 0, unique: 0, creators: 0, acc: 0, totalCorrect: 0, totalAnswers: 0, avgP: 0, avgD: 0 } }
   }, [filtered])
+
+  const playerTiers = useMemo(() => {
+    try {
+      const p: Record<string, { name: string; c: number; t: number }> = {}
+      filtered.forEach(q => q.stats.forEach((s: any) => {
+        const key = s?.clientId || s?.realName || s?.username || s?.name || ""; if (!key) return
+        const _name = applyName(key, s?.realName || s?.username || s?.name || key); if (isExcluded(_name)) return
+        if (!p[key]) p[key] = { name: _name, c: 0, t: 0 }
+        p[key].name = applyName(key, s?.realName || s?.username || s?.name || key)
+        ;(s?.answers || []).forEach((a: any) => { p[key].t++; if (a?.isCorrect) p[key].c++ })
+      }))
+      const nameMap: Record<string, string> = {}; const merged: typeof p = {}
+      Object.entries(p).forEach(([key, val]) => {
+        const norm = val.name.toLowerCase().trim()
+        if (nameMap[norm]) { const ek = nameMap[norm]; merged[ek].c += val.c; merged[ek].t += val.t }
+        else { nameMap[norm] = key; merged[key] = { ...val } }
+      })
+      const tiers = { green: 0, blue: 0, amber: 0, red: 0 }
+      Object.values(merged).forEach(v => {
+        const acc = v.t > 0 ? Math.round(v.c / v.t * 100) : 0
+        if (acc >= 65) tiers.green++
+        else if (acc >= 50) tiers.blue++
+        else if (acc >= 35) tiers.amber++
+        else tiers.red++
+      })
+      return tiers
+    } catch { return { green: 0, blue: 0, amber: 0, red: 0 } }
+  }, [filtered, nameCorrections, applyName])
 
   const regionStats = useMemo(() => {
     try {
@@ -324,12 +409,27 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       while (cur <= end) {
         const k = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`
         const v = m[k] || { q: 0, p: 0, c: 0, t: 0 }
-        result.push({ key: k, label: `${mn[cur.getMonth()]} ${String(cur.getFullYear()).slice(2)}`, players: v.p, quizzes: v.q, acc: v.t > 0 ? Math.round(v.c / v.t * 100) : 0 })
+        result.push({ key: k, label: `${mn[cur.getMonth()]} ${String(cur.getFullYear()).slice(2)}`, players: v.p, quizzes: v.q, correct: v.c, wrong: v.t - v.c, total: v.t, acc: v.t > 0 ? Math.round(v.c / v.t * 100) : 0 })
         cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
       }
       return result
     } catch { return [] }
   }, [filtered])
+
+  const weeklyInMonth = useMemo(() => {
+    if (pFilter !== "month") return []
+    try {
+      const w: Record<number, { p: number; q: number; c: number; t: number; label: string }> = {}
+      filtered.forEach(q => {
+        const d = q.playedDate || q.date; if (!d || q.playerCount === 0) return
+        const weekNum = Math.floor((d.getDate() - 1) / 7) + 1
+        if (!w[weekNum]) w[weekNum] = { p: 0, q: 0, c: 0, t: 0, label: `Wk ${weekNum}` }
+        w[weekNum].q++; w[weekNum].p += q.playerCount
+        q.stats.forEach((s: any) => (s?.answers || []).forEach((a: any) => { w[weekNum].t++; if (a?.isCorrect) w[weekNum].c++ }))
+      })
+      return [1, 2, 3, 4, 5].map(i => ({ week: i, label: w[i]?.label || `Wk ${i}`, players: w[i]?.p || 0, quizzes: w[i]?.q || 0, correct: w[i]?.c || 0, wrong: (w[i]?.t || 0) - (w[i]?.c || 0), total: w[i]?.t || 0, acc: (w[i]?.t ?? 0) > 0 ? Math.round(w[i].c / w[i].t * 100) : 0 })).filter((_, i) => i < 4 || (w[5]?.p ?? 0) > 0)
+    } catch { return [] }
+  }, [filtered, pFilter])
 
   const weeklyDays = useMemo(() => {
     if (pFilter !== "week") return []
@@ -343,7 +443,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         d[dow].q++; d[dow].p += q.playerCount
         q.stats.forEach((s: any) => (s?.answers || []).forEach((a: any) => { d[dow].t++; if (a?.isCorrect) d[dow].c++ }))
       })
-      return [1,2,3,4,5,6,0].map(i => ({ day: DAY[i], players: d[i]?.p || 0, quizzes: d[i]?.q || 0, acc: (d[i]?.t ?? 0) > 0 ? Math.round(d[i].c / d[i].t * 100) : 0 }))
+      return [1,2,3,4,5,6,0].map(i => ({ day: DAY[i], players: d[i]?.p || 0, quizzes: d[i]?.q || 0, correct: d[i]?.c || 0, wrong: Math.max((d[i]?.t || 0) - (d[i]?.c || 0), 0), total: d[i]?.t || 0, acc: (d[i]?.t ?? 0) > 0 ? Math.round(d[i].c / d[i].t * 100) : 0 }))
     } catch { return [] }
   }, [filtered, pFilter])
 
@@ -369,12 +469,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         if (nameMap[norm]) { const ek = nameMap[norm]; merged[ek].q += val.q; merged[ek].pts += val.pts; merged[ek].c += val.c; merged[ek].t += val.t }
         else { nameMap[norm] = key; merged[key] = { ...val } }
       })
-      return Object.entries(merged).filter(([, v]) => v.q >= minGames)
+      const threshold = showBelow50 ? 1 : minGames
+      const all = Object.entries(merged).filter(([, v]) => v.q >= threshold)
         .map(([, v]) => ({ name: v.name, games: v.q, totalPts: v.pts, avgPts: v.q > 0 ? Math.round(v.pts / v.q) : 0, avgCorrect: v.q > 0 ? Math.round(v.c / v.q * 10) / 10 : 0, acc: v.t > 0 ? Math.round(v.c / v.t * 100) : 0 }))
-        .sort((a, b) => topMetric === "avgPts" ? b.avgPts - a.avgPts || b.acc - a.acc : topMetric === "avgCorrect" ? b.avgCorrect - a.avgCorrect || b.acc - a.acc : b.games - a.games || b.avgPts - a.avgPts)
-        .slice(0, 10)
+      if (showBelow50) return all.filter(p => p.acc < 50).sort((a, b) => a.acc - b.acc)
+      return all.sort((a, b) => topMetric === "avgPts" ? b.avgPts - a.avgPts || b.acc - a.acc : topMetric === "avgCorrect" ? b.avgCorrect - a.avgCorrect || b.acc - a.acc : b.games - a.games || b.avgPts - a.avgPts).slice(0, 10)
     } catch { return [] }
-  }, [filtered, topPlayersRegion, nameCorrections, applyName, minGames, topMetric])
+  }, [filtered, topPlayersRegion, nameCorrections, applyName, minGames, topMetric, showBelow50])
 
   const topCreators = useMemo(() => {
     try {
@@ -513,7 +614,48 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     } catch { return { ATP: [], ATD: [], Others: [] } }
   }, [data, rankingGroups, nameCorrections, applyName, minGames, lbStartDate])
 
-  const maxMP = Math.max(...monthly.map(m => m.players), 1)
+  const combinedRows = useMemo(() => {
+    if (pFilter === "all" && soloReport?.ok) {
+      const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
+      const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
+      const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
+      return allNames.map(name => ({
+        name,
+        solo_games: soloMap.get(name)?.total_attempts ?? 0,
+        solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
+        solo_correct: soloMap.get(name)?.total_correct ?? 0,
+        team_games: teamMap.get(name)?.games_played ?? 0,
+        team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
+        team_correct: teamMap.get(name)?.total_correct ?? 0,
+      }))
+    }
+    // Build from filtered (period-filtered) data
+    const p: Record<string, { name: string; games: number; c: number; t: number; pts: number }> = {}
+    filtered.forEach(q => q.stats.forEach((s: any) => {
+      const key = s?.clientId || s?.realName || s?.username || s?.name || ""; if (!key) return
+      const _name = applyName(key, s?.realName || s?.username || s?.name || key); if (isExcluded(_name)) return
+      if (!p[key]) p[key] = { name: _name, games: 0, c: 0, t: 0, pts: 0 }
+      p[key].name = applyName(key, s?.realName || s?.username || s?.name || key)
+      p[key].games++; p[key].pts += s?.points || 0
+      ;(s?.answers || []).forEach((a: any) => { p[key].t++; if (a?.isCorrect) p[key].c++ })
+    }))
+    const nameMap: Record<string, string> = {}; const merged: typeof p = {}
+    Object.entries(p).forEach(([key, val]) => {
+      const norm = val.name.toLowerCase().trim()
+      if (nameMap[norm]) { const ek = nameMap[norm]; merged[ek].games += val.games; merged[ek].c += val.c; merged[ek].t += val.t; merged[ek].pts += val.pts }
+      else { nameMap[norm] = key; merged[key] = { ...val } }
+    })
+    return Object.values(merged).map(v => ({
+      name: v.name,
+      team_games: v.games,
+      team_acc: v.t > 0 ? Math.round(v.c / v.t * 100) : 0,
+      team_correct: v.c,
+      solo_games: 0,
+      solo_acc: 0,
+      solo_correct: 0,
+    }))
+  }, [filtered, pFilter, soloReport, nameCorrections, applyName])
+
   const maxCC = Math.max(...categories.map(c => c.count), 1)
   const maxGQ = Math.max(...Object.values(groupStats).map(g => g.q), 1)
   const rc = ["bg-amber-400", "bg-gray-400", "bg-amber-700", "bg-gray-300", "bg-gray-300"]
@@ -570,6 +712,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     { id: "solo",          label: "Solo Games",    icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2-8 3v1h16v-1c0-1-3-3-8-3z"/><path d="M19 3l1.5 1.5L17 8l-1.5-1.5z" strokeWidth="1.4"/></svg> },
     { id: "team_games",    label: "Team Games",    icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
     { id: "combined",      label: "All Players",   icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg> },
+    { id: "question_bank", label: "Question Bank", icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg> },
   ]
   const manageNav: { id: NavView; label: string; icon: React.ReactNode }[] = [
     { id: "quizzes", label: "My Quizzes",  icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg> },
@@ -638,6 +781,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             </svg>
             <span className="truncate">Exit to player</span>
           </Link>
+          <p className="mt-1.5 text-center text-[10px] font-medium text-gray-300 select-none">Rahoot {APP_VERSION}</p>
         </div>
 
       </aside>
@@ -647,19 +791,67 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
         {/* ── Inline filter bar ────────────────────────────────────────────── */}
         {activeView !== "team" && activeView !== "leaderboard" && (
           <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white flex-wrap">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mr-1">Region</span>
-            {(["all","BR","MY","CN"] as RFilter[]).map(r => (
-              <button key={r} onClick={() => setRFilter(r)} className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", rFilter === r ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
-                {r === "all" ? "All regions" : r === "BR" ? `BR (${regionStats.BR.q})` : r === "MY" ? `MY (${regionStats.MY.q})` : `CN (${regionStats.CN.q})`}
-              </button>
-            ))}
+            {(["all","BR","MY","CN"] as RFilter[]).map(r => {
+              const cnt = r === "all" ? regionStats.BR.q + regionStats.MY.q + regionStats.CN.q : regionStats[r]?.q ?? 0
+              return (
+                <button key={r} onClick={() => setRFilter(r)} className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", rFilter === r ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
+                  {r === "all" ? `All (${cnt})` : `${r} (${cnt})`}
+                </button>
+              )
+            })}
             {activeView !== "quizzes" && (<>
               <div className="w-px h-4 bg-gray-200 mx-0.5"/>
-              {(["all","month","week"] as PFilter[]).map(p => (
-                <button key={p} onClick={() => setPFilter(p)} className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", pFilter === p ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
-                  {p === "all" ? "All time" : p === "month" ? "This month" : "This week"}
+              {/* All time */}
+              <button
+                onClick={() => { setPFilter("all"); setPOffset(0) }}
+                className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", pFilter === "all" ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}
+              >
+                All time
+              </button>
+
+              {/* Month nav */}
+              <div className={clsx("flex items-center rounded-full overflow-hidden border transition-colors", pFilter === "month" ? "border-primary" : "border-gray-200")}>
+                <button
+                  onClick={() => { setPFilter("month"); setPOffset(p => p - 1) }}
+                  className={clsx("px-1.5 py-1 text-[10px] font-bold transition-colors", pFilter === "month" ? "bg-primary text-white hover:bg-primary/80" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}
+                  style={{ minWidth: 20 }}
+                >‹</button>
+                <button
+                  onClick={() => { setPFilter("month"); setPOffset(0) }}
+                  className={clsx("px-2.5 py-1 text-[10px] font-semibold transition-colors", pFilter === "month" ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}
+                  style={{ minWidth: 64 }}
+                >
+                  {pFilter === "month" ? pLabel : "Month"}
                 </button>
-              ))}
+                <button
+                  onClick={() => { setPFilter("month"); setPOffset(p => Math.min(p + 1, 0)) }}
+                  className={clsx("px-1.5 py-1 text-[10px] font-bold transition-colors", pFilter === "month" && pOffset < 0 ? "bg-primary text-white hover:bg-primary/80" : "bg-gray-100 text-gray-400 cursor-default")}
+                  disabled={pFilter !== "month" || pOffset >= 0}
+                  style={{ minWidth: 20 }}
+                >›</button>
+              </div>
+
+              {/* Week nav */}
+              <div className={clsx("flex items-center rounded-full overflow-hidden border transition-colors", pFilter === "week" ? "border-primary" : "border-gray-200")}>
+                <button
+                  onClick={() => { setPFilter("week"); setPOffset(p => p - 1) }}
+                  className={clsx("px-1.5 py-1 text-[10px] font-bold transition-colors", pFilter === "week" ? "bg-primary text-white hover:bg-primary/80" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}
+                  style={{ minWidth: 20 }}
+                >‹</button>
+                <button
+                  onClick={() => { setPFilter("week"); setPOffset(0) }}
+                  className={clsx("px-2.5 py-1 text-[10px] font-semibold transition-colors", pFilter === "week" ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}
+                  style={{ minWidth: 90 }}
+                >
+                  {pFilter === "week" ? pLabel : "Week"}
+                </button>
+                <button
+                  onClick={() => { setPFilter("week"); setPOffset(p => Math.min(p + 1, 0)) }}
+                  className={clsx("px-1.5 py-1 text-[10px] font-bold transition-colors", pFilter === "week" && pOffset < 0 ? "bg-primary text-white hover:bg-primary/80" : "bg-gray-100 text-gray-400 cursor-default")}
+                  disabled={pFilter !== "week" || pOffset >= 0}
+                  style={{ minWidth: 20 }}
+                >›</button>
+              </div>
               <div className="w-px h-4 bg-gray-200 mx-0.5"/>
               <select value={aFilter} onChange={e => setAFilter(e.target.value)} className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600 outline-none cursor-pointer">
                 <option value="all">All authors</option>
@@ -727,63 +919,105 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               </div>
             </div>
 
-            {/* Monthly trend */}
-            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-800">Participation over time</h3>
-                  <p className="text-sm text-gray-400 mt-1">{pFilter === "week" ? "Players by day this week" : "Monthly players across all sessions"}</p>
+            {/* Evolution chart */}
+            {(() => {
+              // Determine data source and x-labels based on active filter
+              type Bar = { label: string; players: number; quizzes: number; correct: number; wrong: number; total: number; acc: number }
+              let bars: Bar[] = []
+              let subtitle = ""
+              if (pFilter === "week") {
+                bars = weeklyDays.map(d => ({ label: d.day, players: d.players, quizzes: d.quizzes, correct: d.correct, wrong: d.wrong, total: d.total, acc: d.acc }))
+                subtitle = `Activity by weekday · ${pLabel}`
+              } else if (pFilter === "month") {
+                bars = weeklyInMonth.map(w => ({ label: w.label, players: w.players, quizzes: w.quizzes, correct: w.correct, wrong: w.wrong, total: w.total, acc: w.acc }))
+                subtitle = `Weekly breakdown · ${pLabel}`
+              } else {
+                bars = monthly
+                subtitle = `Monthly activity · ${monthly.length} month${monthly.length !== 1 ? "s" : ""}`
+              }
+              const hasAny = bars.some(b => b.total > 0)
+              const maxTotal = Math.max(...bars.map(b => b.total), 1)
+              const VW = 600, VH = 220, PX = 40, PYT = 24, PYB = 36, GAP = pFilter === "all" && bars.length > 8 ? 3 : 6
+              const n = bars.length
+              const slotW = n > 0 ? (VW - 2 * PX) / n : 40
+              const barW = Math.max(slotW - GAP, 4)
+              const chartH = VH - PYT - PYB
+              return (
+                <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Activity &amp; Accuracy Trend</h3>
+                      <p className="text-sm text-gray-400 mt-0.5">{subtitle}</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-400">
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-400"/>&nbsp;Correct</span>
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-400"/>&nbsp;Wrong</span>
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-6 border-t-2 border-dashed border-amber-400"/>&nbsp;Accuracy %</span>
+                    </div>
+                  </div>
+                  {!hasAny ? (
+                    <div className="flex items-center justify-center h-36 text-sm text-gray-400">No activity in this period</div>
+                  ) : (
+                    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }}>
+                      {/* Grid lines */}
+                      {[0.25, 0.5, 0.75, 1].map(f => {
+                        const gy = PYT + (1 - f) * chartH
+                        return <line key={f} x1={PX} y1={gy.toFixed(1)} x2={VW - PX} y2={gy.toFixed(1)} stroke="#f1f5f9" strokeWidth="1"/>
+                      })}
+                      {/* Stacked bars */}
+                      {bars.map((b, i) => {
+                        const bx = PX + i * slotW + GAP / 2
+                        const totalH = Math.max((b.total / maxTotal) * chartH, b.total > 0 ? 3 : 0)
+                        const correctH = b.total > 0 ? (b.correct / b.total) * totalH : 0
+                        const wrongH = totalH - correctH
+                        const barTop = VH - PYB - totalH
+                        const hasData = b.total > 0
+                        return (
+                          <g key={b.label}>
+                            {/* Wrong (red, bottom of stacked from top = bar bottom) */}
+                            {hasData && wrongH > 0 && <rect x={bx.toFixed(1)} y={(VH - PYB - wrongH).toFixed(1)} width={barW.toFixed(1)} height={wrongH.toFixed(1)} rx="0" fill="#f87171" opacity="0.85"/>}
+                            {/* Correct (green, stacked above wrong) */}
+                            {hasData && correctH > 0 && <rect x={bx.toFixed(1)} y={barTop.toFixed(1)} width={barW.toFixed(1)} height={correctH.toFixed(1)} rx="0" fill="#4ade80" opacity="0.85"/>}
+                            {/* Top cap rounded */}
+                            {hasData && totalH >= 6 && <rect x={bx.toFixed(1)} y={barTop.toFixed(1)} width={barW.toFixed(1)} height={Math.min(totalH, 6).toFixed(1)} rx="3" fill={correctH > 0 ? "#4ade80" : "#f87171"} opacity="0.85"/>}
+                            {/* Player count label above bar */}
+                            {hasData && b.players > 0 && <text x={(bx + barW / 2).toFixed(1)} y={(barTop - 6).toFixed(1)} textAnchor="middle" fontSize="10" fill="#374151" fontWeight="600" fontFamily="inherit">{b.players}</text>}
+                            {/* X-axis label */}
+                            <text x={(bx + barW / 2).toFixed(1)} y={(VH - 8).toFixed(1)} textAnchor="middle" fontSize={bars.length > 10 ? "9" : "11"} fill={hasData ? "#374151" : "#d1d5db"} fontWeight={hasData ? "500" : "400"} fontFamily="inherit">{b.label}</text>
+                            <title>{`${b.label}: ${b.players} players · ${b.quizzes} sessions · ${b.correct} correct · ${b.wrong} wrong · ${b.acc}% acc`}</title>
+                          </g>
+                        )
+                      })}
+                      {/* Accuracy % line (amber dashed, separate 0-100 scale) */}
+                      {(() => {
+                        const activeBars = bars.map((b, i) => ({ ...b, i })).filter(b => b.total > 0)
+                        if (activeBars.length < 2) return null
+                        const accPath = activeBars.map((b, idx) => {
+                          const cx = PX + b.i * slotW + GAP / 2 + barW / 2
+                          const cy = PYT + (1 - b.acc / 100) * chartH
+                          return `${idx === 0 ? "M" : "L"}${cx.toFixed(1)},${cy.toFixed(1)}`
+                        }).join(" ")
+                        return (
+                          <>
+                            <path d={accPath} fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3"/>
+                            {activeBars.map((b, idx) => {
+                              const cx = PX + b.i * slotW + GAP / 2 + barW / 2
+                              const cy = PYT + (1 - b.acc / 100) * chartH
+                              return (
+                                <g key={`acc-${idx}`}>
+                                  <circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r="3.5" fill="white" stroke="#fbbf24" strokeWidth="2"/>
+                                  <text x={cx.toFixed(1)} y={(cy - 8).toFixed(1)} textAnchor="middle" fontSize="9" fill="#d97706" fontWeight="600" fontFamily="inherit">{b.acc}%</text>
+                                </g>
+                              )
+                            })}
+                          </>
+                        )
+                      })()}
+                    </svg>
+                  )}
                 </div>
-                {pFilter !== "week" && monthly.length > 0 && <span className="text-sm font-semibold text-primary bg-primary/8 rounded-full px-3 py-1">{monthly.length} month{monthly.length !== 1 ? "s" : ""}</span>}
-              </div>
-              {pFilter === "week" ? (() => {
-                const maxP = Math.max(...weeklyDays.map(d => d.players), 1)
-                const VW = 560, VH = 200, PX = 24, PYT = 28, PYB = 32, BAR_GAP = 8
-                const slotW = (VW - 2 * PX) / 7
-                const barW = slotW - BAR_GAP
-                return weeklyDays.some(d => d.players > 0) ? (
-                  <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }}>
-                    {weeklyDays.map((d, i) => {
-                      const bh = Math.max((d.players / maxP) * (VH - PYT - PYB), d.players > 0 ? 4 : 0)
-                      const bx = PX + i * slotW + BAR_GAP / 2
-                      const by = VH - PYB - bh
-                      const hasData = d.players > 0
-                      return (
-                        <g key={d.day}>
-                          <rect x={bx.toFixed(1)} y={by.toFixed(1)} width={barW.toFixed(1)} height={bh.toFixed(1)} rx="5" fill={hasData ? "#009edf" : "#f1f5f9"}/>
-                          {hasData && <rect x={bx.toFixed(1)} y={by.toFixed(1)} width={barW.toFixed(1)} height={Math.min(bh, 10).toFixed(1)} rx="5" fill="rgba(255,255,255,0.25)"/>}
-                          {hasData && <text x={(bx + barW/2).toFixed(1)} y={(by - 8).toFixed(1)} textAnchor="middle" fontSize="12" fill="#009edf" fontWeight="700" fontFamily="inherit">{d.players}</text>}
-                          <text x={(bx + barW/2).toFixed(1)} y={(VH - 10).toFixed(1)} textAnchor="middle" fontSize="11" fill={hasData ? "#374151" : "#9ca3af"} fontWeight={hasData ? "600" : "400"} fontFamily="inherit">{d.day}</text>
-                          {hasData && d.quizzes > 0 && <text x={(bx + barW/2).toFixed(1)} y={(VH - 20).toFixed(1)} textAnchor="middle" fontSize="9" fill="#9ca3af" fontFamily="inherit">{d.quizzes}q</text>}
-                          <title>{`${d.day}: ${d.players} players · ${d.quizzes} sessions · ${d.acc}% acc`}</title>
-                        </g>
-                      )
-                    })}
-                  </svg>
-                ) : <div className="flex items-center justify-center h-36 text-sm text-gray-400">No sessions this week</div>
-              })() : monthly.length > 1 ? (() => {
-                const VW = 560, VH = 220, PX = 12, PYT = 28, PYB = 38
-                const pts = monthly.map((m, i) => ({ x: PX + (i / (monthly.length - 1)) * (VW - 2 * PX), y: PYT + (1 - m.players / maxMP) * (VH - PYT - PYB), ...m }))
-                const lineStr = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
-                const areaStr = `${lineStr} L${pts[pts.length-1].x.toFixed(1)},${(VH-PYB).toFixed(1)} L${pts[0].x.toFixed(1)},${(VH-PYB).toFixed(1)} Z`
-                return (
-                  <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }}>
-                    <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#009edf" stopOpacity="0.2"/><stop offset="100%" stopColor="#009edf" stopOpacity="0.01"/></linearGradient></defs>
-                    {[0.25, 0.5, 0.75].map(f => { const gy = PYT + (1-f)*(VH-PYT-PYB); return <line key={f} x1={PX} y1={gy.toFixed(1)} x2={VW-PX} y2={gy.toFixed(1)} stroke="#f1f5f9" strokeWidth="1"/> })}
-                    <path d={areaStr} fill="url(#ag)"/>
-                    <path d={lineStr} fill="none" stroke="#009edf" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    {pts.map((p, i) => (
-                      <g key={i}>
-                        <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r="5" fill="white" stroke="#009edf" strokeWidth="2.5"/>
-                        <text x={p.x.toFixed(1)} y={(p.y-13).toFixed(1)} textAnchor="middle" fontSize="11" fill="#009edf" fontWeight="700" fontFamily="inherit">{p.players}</text>
-                        <text x={p.x.toFixed(1)} y={(VH-10).toFixed(1)} textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily="inherit">{p.label}</text>
-                        <title>{`${p.label}: ${p.players} players · ${p.quizzes} quizzes · ${p.acc}% acc`}</title>
-                      </g>
-                    ))}
-                  </svg>
-                )
-              })() : <div className="flex items-center justify-center h-36 text-sm text-gray-400">{monthly.length === 1 ? `${monthly[0].label}: ${monthly[0].players} players` : "No data yet"}</div>}
-            </div>
+              )
+            })()}
 
             {/* 3-col */}
             <div className="grid grid-cols-3 gap-3">
@@ -864,8 +1098,74 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               </div>
             </div>
 
-            {/* Groups + Hardest */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Performance row — Accuracy Breakdown | Player Tiers | Group Performance */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* Panel A — Accuracy Breakdown */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                <h3 className="mb-4 text-base font-semibold text-gray-800">Accuracy Breakdown</h3>
+                {metrics.totalAnswers === 0 ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-gray-400">No data yet</div>
+                ) : (() => {
+                  const total = metrics.totalAnswers
+                  const correct = metrics.totalCorrect
+                  const incorrect = total - correct
+                  const r = 50, sw = 10, circ = 2 * Math.PI * r
+                  const correctArc = (correct / total) * circ
+                  return (
+                    <div className="flex flex-col items-center gap-4">
+                      <svg width="120" height="120" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r={r} fill="none" stroke="#f1f5f9" strokeWidth={sw}/>
+                        <circle cx="60" cy="60" r={r} fill="none" stroke="#22c55e" strokeWidth={sw}
+                          strokeDasharray={`${correctArc.toFixed(2)} ${(circ - correctArc).toFixed(2)}`}
+                          strokeLinecap="butt" style={{ transform: "rotate(-90deg)", transformOrigin: "60px 60px" }}/>
+                        <circle cx="60" cy="60" r={r} fill="none" stroke="#ef4444" strokeWidth={sw}
+                          strokeDasharray={`${(circ - correctArc).toFixed(2)} ${correctArc.toFixed(2)}`}
+                          strokeDashoffset={(-correctArc).toFixed(2)}
+                          strokeLinecap="butt" style={{ transform: "rotate(-90deg)", transformOrigin: "60px 60px" }}/>
+                        <text x="60" y="55" textAnchor="middle" fontSize="14" fontWeight="700" fill="#374151" fontFamily="inherit">{Math.round(correct / total * 100)}%</text>
+                        <text x="60" y="70" textAnchor="middle" fontSize="9" fill="#9ca3af" fontFamily="inherit">accuracy</text>
+                      </svg>
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="text-sm font-semibold" style={{ color: "#22c55e" }}>{correct.toLocaleString()} correct</span>
+                        <span className="text-sm font-semibold" style={{ color: "#ef4444" }}>{incorrect.toLocaleString()} incorrect</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Panel B — Player Tiers */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                <h3 className="mb-1 text-base font-semibold text-gray-800">Player Tiers</h3>
+                <p className="mb-4 text-sm text-gray-400">Accuracy distribution</p>
+                {(() => {
+                  const tierData = [
+                    { label: "≥ 65%", count: playerTiers.green, color: "#22c55e" },
+                    { label: "50–64%", count: playerTiers.blue, color: "#009edf" },
+                    { label: "35–49%", count: playerTiers.amber, color: "#f59e0b" },
+                    { label: "< 35%", count: playerTiers.red, color: "#ef4444" },
+                  ]
+                  const maxTier = Math.max(...tierData.map(t => t.count), 1)
+                  return (
+                    <div className="flex flex-col gap-3">
+                      {tierData.map(t => (
+                        <div key={t.label} className="flex items-center gap-2">
+                          <span className="w-14 shrink-0 text-xs font-semibold text-gray-500">{t.label}</span>
+                          <div className="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full transition-all" style={{ width: `${(t.count / maxTier) * 100}%`, background: t.color }}/>
+                          </div>
+                          <span className="w-6 shrink-0 text-right text-xs font-bold text-gray-600">{t.count}</span>
+                        </div>
+                      ))}
+                      {(playerTiers.green + playerTiers.blue + playerTiers.amber + playerTiers.red) === 0 && (
+                        <p className="text-sm text-gray-400 text-center py-4">No data yet</p>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* Panel C — Group Performance */}
               <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                 <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Groups</p>
                 <div className="grid grid-cols-3 gap-3">
@@ -884,23 +1184,37 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   })}
                 </div>
               </div>
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-gray-400">Hardest Quizzes</p>
-                <div className="flex flex-col gap-3">
-                  {hardest.map((q, i) => (
+            </div>
+
+            {/* Hardest Questions — full width */}
+            <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Hardest Questions</p>
+                <button onClick={() => setActiveView("question_bank")} className="text-[10px] font-semibold text-primary hover:text-primary/70 transition-colors">Question bank →</button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {(diffLoading || diffQuestions === null) && (
+                  <div className="flex flex-col items-center justify-center py-6 gap-2">
+                    <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    <p className="text-xs text-gray-400">Loading question data…</p>
+                  </div>
+                )}
+                {!diffLoading && diffQuestions && diffQuestions.slice(0, 5).map((q, i) => {
+                  const color = q.errorRate >= 70 ? "#ef4444" : q.errorRate >= 50 ? "#f59e0b" : "#009edf"
+                  return (
                     <div key={i} className="rounded-lg border border-gray-100 px-3 py-2.5">
-                      <div className="flex items-start gap-3 mb-2">
-                        <AccRing v={q.acc} size={44}/>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-700 leading-tight">{q.subject}</div>
-                          <div className="flex items-center gap-1.5 mt-1"><Tag region={q.region}/><span className="text-xs text-gray-400">{q.players} players</span></div>
-                        </div>
+                      <div className="flex items-center gap-3 mb-1.5">
+                        <AccRing v={100 - q.errorRate} size={40}/>
+                        <span className="flex-1 min-w-0 text-sm text-gray-700 leading-snug line-clamp-2">{q.questionTitle}</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full bg-red-400" style={{ width: `${q.acc}%` }}/></div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${q.errorRate}%`, background: color }}/></div>
+                        <span className="text-[10px] font-bold tabular-nums" style={{ color }}>{q.errorRate}% error · {q.timesAnswered}×</span>
+                      </div>
                     </div>
-                  ))}
-                  {hardest.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data yet</p>}
-                </div>
+                  )
+                })}
+                {!diffLoading && diffQuestions !== null && diffQuestions.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data yet — play more sessions first</p>}
               </div>
             </div>
           </>)}
@@ -909,7 +1223,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           {activeView === "players" && (
             <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
               <div className="mb-2 flex items-center justify-between flex-wrap gap-3">
-                <h3 className="text-base font-semibold text-gray-800">Top players</h3>
+                <h3 className="text-base font-semibold text-gray-800">{showBelow50 ? "Players below 50% accuracy" : "Top players"}</h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex rounded-lg overflow-hidden border border-gray-200">
                     {(["avgPts", "avgCorrect", "games"] as const).map((m, mi) => (
@@ -920,13 +1234,12 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                       </button>
                     ))}
                   </div>
-                  {(["all", "BR", "MY", "CN"] as const).map(r => (
-                    <button key={r} onClick={() => setTopPlayersRegion(r)}
-                      className={clsx("rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                        topPlayersRegion === r ? "bg-primary text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200")}>
-                      {r === "all" ? "All" : r === "BR" ? "🇧🇷 BR" : r === "MY" ? "🇲🇾 MY" : "🇨🇳 CN"}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setShowBelow50(v => !v)}
+                    className={clsx("rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                      showBelow50 ? "bg-red-500 text-white" : "bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-500")}>
+                    Below 50%
+                  </button>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-gray-400">Min games:</span>
                     {[1, 2, 3, 5].map(n => (
@@ -938,7 +1251,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 </div>
               </div>
               <p className="mb-5 text-sm text-gray-400">
-                Sorted by {topMetric === "avgPts" ? "avg points" : topMetric === "avgCorrect" ? "avg correct answers" : "total games played"} · Min {minGames} {minGames === 1 ? "game" : "games"}
+                {showBelow50 ? `${topPlayers.length} player${topPlayers.length !== 1 ? "s" : ""} with accuracy below 50% · at least 1 game` : `Sorted by ${topMetric === "avgPts" ? "avg points" : topMetric === "avgCorrect" ? "avg correct answers" : "total games played"} · Min ${minGames} ${minGames === 1 ? "game" : "games"}`}
               </p>
               <div className="flex items-center gap-3 border-b border-gray-100 pb-3 mb-1 px-2">
                 <TH cls="w-8 text-center">#</TH>
@@ -948,9 +1261,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 <TH cls="w-36 text-right">Accuracy</TH>
               </div>
               {topPlayers.map((p, i) => (
-                <div key={p.name + i} className={clsx("flex items-center gap-3 py-3 border-b border-gray-50 last:border-0 rounded-xl px-2", i < 3 ? "bg-amber-50/40" : "hover:bg-gray-50")}>
+                <div key={p.name + i} className={clsx("flex items-center gap-3 py-3 border-b border-gray-50 last:border-0 rounded-xl px-2", !showBelow50 && i < 3 ? "bg-amber-50/40" : "hover:bg-gray-50")}>
                   <div className="w-8 shrink-0 text-center">
-                    {i < 3 ? <span className="text-base">{["🥇","🥈","🥉"][i]}</span> : <span className={clsx("inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white", rc[i] || "bg-gray-300")}>{i+1}</span>}
+                    {!showBelow50 && i < 3 ? <span className="text-base">{["🥇","🥈","🥉"][i]}</span> : <span className={clsx("inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white", rc[i] || "bg-gray-300")}>{i+1}</span>}
                   </div>
                   <span className="flex-1 min-w-0 text-sm font-medium text-gray-700 truncate">{p.name}</span>
                   <span className="w-16 shrink-0 text-center text-sm text-gray-500">{p.games}</span>
@@ -958,7 +1271,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="w-36 shrink-0 flex justify-end"><AccBar v={p.acc}/></div>
                 </div>
               ))}
-              {topPlayers.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No players with {minGames}+ games yet</p>}
+              {topPlayers.length === 0 && <p className="text-sm text-gray-400 text-center py-8">{showBelow50 ? "No players below 50% accuracy found" : `No players with ${minGames}+ games yet`}</p>}
             </div>
           )}
 
@@ -1422,21 +1735,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           {/* ── COMBINED (All Players) ─────────────────────────────────────── */}
           {(activeView === "combined") && (
             <div className="flex flex-col gap-5">
-              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
-              {soloReport && soloReport.ok && (() => {
-                const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
-                const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
-                const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
-
-                const rows = allNames.map(name => ({
-                  name,
-                  solo_games: soloMap.get(name)?.total_attempts ?? 0,
-                  solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
-                  solo_correct: soloMap.get(name)?.total_correct ?? 0,
-                  team_games: teamMap.get(name)?.games_played ?? 0,
-                  team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
-                  team_correct: teamMap.get(name)?.total_correct ?? 0,
-                }))
+              {soloLoading && pFilter === "all" && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
+              {(combinedRows.length > 0 || (pFilter !== "all")) && (() => {
+                const rows = combinedRows
 
                 const sorted = [...rows].sort((a, b) => {
                   if (combinedSort === "name") return a.name.localeCompare(b.name)
@@ -1574,6 +1875,102 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 })}
                 {recent.length === 0 && <p className="text-sm text-gray-400 text-center py-12">No sessions played yet</p>}
               </div>
+            </div>
+          )}
+
+          {/* ── QUESTION BANK ─────────────────────────────────────────────── */}
+          {activeView === "question_bank" && (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-800">Question Bank</h3>
+                  <p className="text-sm text-gray-400 mt-1">Most-missed questions — select to build a review quiz</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-400">Min error:</span>
+                    {[0, 30, 50, 70].map(n => (
+                      <button key={n} onClick={() => setBankMinError(n)}
+                        className={clsx("rounded-full px-2.5 py-1 text-xs font-semibold transition-colors",
+                          bankMinError === n ? "bg-primary text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200")}>{n}%+</button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setDiffQuestions(null); fetchDiffQuestions() }} disabled={diffLoading}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {diffLoading && <div className="text-center py-12 text-sm text-gray-400">Loading questions…</div>}
+
+              {diffQuestions && (() => {
+                const filtered_dq = diffQuestions.filter(q => q.errorRate >= bankMinError)
+                const allSelected = filtered_dq.length > 0 && filtered_dq.every(q => bankSelected.has(q.questionTitle))
+                return (
+                  <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+                    {/* Save bar */}
+                    {bankSelected.size > 0 && (
+                      <div className="px-5 py-3 border-b border-gray-100 bg-primary/5 flex items-center gap-3 flex-wrap">
+                        <span className="text-sm font-semibold text-primary">{bankSelected.size} question{bankSelected.size !== 1 ? "s" : ""} selected</span>
+                        <input value={bankTitle} onChange={e => setBankTitle(e.target.value)}
+                          className="flex-1 min-w-40 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-primary"
+                          placeholder="Nome do quiz" />
+                        <button onClick={saveBankQuiz} disabled={bankSaving}
+                          className="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50 hover:bg-primary/90 transition-colors">
+                          {bankSaving ? "Saving…" : "Create Quiz"}
+                        </button>
+                        <button onClick={() => setBankSelected(new Set())} className="text-sm text-gray-400 hover:text-gray-600 transition-colors">Clear</button>
+                      </div>
+                    )}
+                    {bankSaved && (
+                      <div className="px-5 py-2.5 bg-green-50 border-b border-green-100 text-sm text-green-700 font-medium flex items-center gap-2">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                        Quiz saved: <span className="font-bold">{bankSaved}</span>
+                        <button onClick={() => setBankSaved(null)} className="ml-auto text-green-400 hover:text-green-600">✕</button>
+                      </div>
+                    )}
+                    {/* Header */}
+                    <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center gap-3">
+                      <input type="checkbox" checked={allSelected} onChange={() => {
+                        if (allSelected) setBankSelected(prev => { const n = new Set(prev); filtered_dq.forEach(q => n.delete(q.questionTitle)); return n })
+                        else setBankSelected(prev => { const n = new Set(prev); filtered_dq.forEach(q => n.add(q.questionTitle)); return n })
+                      }} className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" />
+                      <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Question</span>
+                      <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">Answered</span>
+                      <span className="w-16 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">Errors</span>
+                      <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Error rate</span>
+                    </div>
+
+                    {filtered_dq.length === 0 ? (
+                      <div className="py-16 text-center text-sm text-gray-400">No questions with {bankMinError}%+ error rate yet</div>
+                    ) : (
+                      <div style={{ maxHeight: "600px", overflowY: "auto" }}>
+                        {filtered_dq.map((q, i) => {
+                          const sel = bankSelected.has(q.questionTitle)
+                          const color = q.errorRate >= 70 ? "#ef4444" : q.errorRate >= 50 ? "#f59e0b" : q.errorRate >= 30 ? "#009edf" : "#22c55e"
+                          return (
+                            <div key={i} onClick={() => setBankSelected(prev => { const n = new Set(prev); sel ? n.delete(q.questionTitle) : n.add(q.questionTitle); return n })}
+                              className={clsx("flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 cursor-pointer transition-colors", sel ? "bg-primary/5" : "hover:bg-gray-50")}>
+                              <input type="checkbox" checked={sel} readOnly className="w-4 h-4 rounded border-gray-300 accent-primary pointer-events-none shrink-0" />
+                              <span className="flex-1 min-w-0 text-sm text-gray-700 leading-snug">{q.questionTitle}</span>
+                              <span className="w-20 shrink-0 text-center text-sm tabular-nums text-gray-500">{q.timesAnswered}×</span>
+                              <span className="w-16 shrink-0 text-center text-sm tabular-nums text-gray-500">{q.timesWrong}×</span>
+                              <div className="w-24 shrink-0 flex items-center justify-end gap-1.5">
+                                <div className="w-12 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${q.errorRate}%`, background: color }} />
+                                </div>
+                                <span className="text-xs font-bold w-8 text-right tabular-nums" style={{ color }}>{q.errorRate}%</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
 

@@ -5,6 +5,7 @@ import Button from "@rahoot/web/components/Button"
 import Form from "@rahoot/web/components/Form"
 import Input from "@rahoot/web/components/Input"
 import { useEvent } from "@rahoot/web/contexts/socketProvider"
+import { APP_VERSION } from "@rahoot/web/version"
 import Image from "next/image"
 import { KeyboardEvent, useState } from "react"
 import toast from "react-hot-toast"
@@ -49,6 +50,7 @@ const ManagerPassword = ({ onSubmit }: Props) => {
             />
             <Button onClick={handleSubmit}>Enter</Button>
         </Form>
+        <p className="text-[11px] font-medium text-white/50 select-none">Rahoot {APP_VERSION}</p>
       </div>
     </div>
   )

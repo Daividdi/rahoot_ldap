@@ -653,6 +653,97 @@ io.on("connection", (socket) => {
     } catch (err) { console.error("getFeedbackStats error:", err); }
   });
 
+  // ── Difficult questions analytics (per-question error rates) ─────────────
+  socket.on("manager:getDifficultQuestions", (callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const d = db()
+      const rows = d.prepare(`
+        SELECT sp.answers_json, s.quiz_id, s.quiz_title
+        FROM session_players sp
+        JOIN sessions s ON s.id = sp.session_id
+        WHERE sp.answers_json IS NOT NULL
+      `).all() as any[]
+
+      const qmap: Record<string, { questionTitle: string; quizzes: Set<string>; timesAnswered: number; timesCorrect: number }> = {}
+      for (const row of rows) {
+        try {
+          const answers = JSON.parse(row.answers_json) as any[]
+          for (const ans of answers) {
+            const title = (ans.questionTitle || "").trim()
+            if (!title) continue
+            if (!qmap[title]) qmap[title] = { questionTitle: title, quizzes: new Set(), timesAnswered: 0, timesCorrect: 0 }
+            qmap[title].timesAnswered++
+            if (ans.isCorrect) qmap[title].timesCorrect++
+            qmap[title].quizzes.add(row.quiz_id)
+          }
+        } catch {}
+      }
+
+      const result = Object.values(qmap)
+        .filter(q => q.timesAnswered >= 2)
+        .map(q => ({
+          questionTitle: q.questionTitle,
+          quizCount: q.quizzes.size,
+          timesAnswered: q.timesAnswered,
+          timesCorrect: q.timesCorrect,
+          timesWrong: q.timesAnswered - q.timesCorrect,
+          errorRate: Math.round((1 - q.timesCorrect / q.timesAnswered) * 100),
+        }))
+        .sort((a, b) => b.errorRate - a.errorRate || b.timesAnswered - a.timesAnswered)
+        .slice(0, 100)
+
+      callback({ ok: true, questions: result })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── Save question bank ─────────────────────────────────────────────────────
+  socket.on("manager:saveQuestionBank", ({ title, questionTitles }: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const fs = require("fs")
+      const path = require("path")
+      const dir = findQuizDir()
+      const quizFiles = fs.readdirSync(dir).filter((f: string) => f.endsWith(".json"))
+
+      const questionsByTitle: Record<string, any> = {}
+      for (const file of quizFiles) {
+        try {
+          const quiz = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"))
+          for (const q of (quiz.questions || [])) {
+            const t = (q.question || "").trim()
+            if (t && !questionsByTitle[t]) questionsByTitle[t] = { ...q }
+          }
+        } catch {}
+      }
+
+      const found: any[] = []
+      for (const qt of (questionTitles || [])) {
+        const q = questionsByTitle[(qt || "").trim()]
+        if (q) found.push(q)
+      }
+
+      if (found.length === 0) { callback({ ok: false, error: "No matching questions found in quiz files" }); return }
+
+      const bankId = `question-bank-${Date.now()}.json`
+      const bankQuiz = {
+        id: bankId,
+        subject: title || "Question Bank",
+        createdBy: "Manager",
+        createdAt: new Date().toLocaleDateString("pt-BR") + ", " + new Date().toLocaleTimeString("pt-BR"),
+        lastPlayedAt: "",
+        questions: found,
+        lastSessionStats: [],
+      }
+      fs.writeFileSync(path.join(dir, bankId), JSON.stringify(bankQuiz, null, 2))
+      callback({ ok: true, quizId: bankId, count: found.length })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
   socket.on("disconnect", () => {
     console.log(`A user disconnected : ${socket.id}`)
     const managerGame = registry.getGameByManagerSocketId(socket.id)

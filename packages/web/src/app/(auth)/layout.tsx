@@ -5,6 +5,7 @@ import Loader from "@rahoot/web/components/Loader"
 import AuthLoader from "@rahoot/web/components/AuthLoader"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import Image from "next/image"
+import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { PropsWithChildren, useEffect, useState } from "react"
 
@@ -98,6 +99,19 @@ const AuthLayout = ({ children }: PropsWithChildren) => {
           {children}
         </div>
       )}
+
+      {/* Discreet admin access — bottom-right corner */}
+      <Link
+        href="/manager"
+        title="Acesso administrador"
+        aria-label="Acesso administrador"
+        className="fixed bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full text-white/35 transition-all duration-200 hover:bg-white/15 hover:text-white focus-visible:bg-white/15 focus-visible:text-white"
+        style={{ zIndex: 5 }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+        </svg>
+      </Link>
     </section>
   )
 }
