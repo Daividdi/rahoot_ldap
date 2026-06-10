@@ -43,6 +43,9 @@ const buildRoomList = (game: any) =>
 
 const port = 3001
 
+// 60s cache for the difficult-questions analytics (expensive full scan)
+let difficultQuestionsCache: { at: number; questions: any[] } | null = null
+
 console.log(`Socket server running on port ${port}`)
 io.listen(Number(port))
 
@@ -654,8 +657,14 @@ io.on("connection", (socket) => {
   });
 
   // ── Difficult questions analytics (per-question error rates) ─────────────
+  // Full-table scan + JSON.parse of every answers blob — cached for 60s so
+  // repeated dashboard opens don't re-run it.
   socket.on("manager:getDifficultQuestions", (callback: any) => {
     if (typeof callback !== "function") return
+    if (difficultQuestionsCache && Date.now() - difficultQuestionsCache.at < 60_000) {
+      callback({ ok: true, questions: difficultQuestionsCache.questions })
+      return
+    }
     try {
       const d = db()
       const rows = d.prepare(`
@@ -693,6 +702,7 @@ io.on("connection", (socket) => {
         .sort((a, b) => b.errorRate - a.errorRate || b.timesAnswered - a.timesAnswered)
         .slice(0, 100)
 
+      difficultQuestionsCache = { at: Date.now(), questions: result }
       callback({ ok: true, questions: result })
     } catch (err: any) {
       callback({ ok: false, error: String(err) })

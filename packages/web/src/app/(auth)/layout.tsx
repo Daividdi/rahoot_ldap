@@ -57,7 +57,7 @@ const AuthLayout = ({ children }: PropsWithChildren) => {
 
   const [splashDone, setSplashDone] = useState(false)
   useEffect(() => {
-    const t = setTimeout(() => setSplashDone(true), 2000)
+    const t = setTimeout(() => setSplashDone(true), 900)
     return () => clearTimeout(t)
   }, [])
 
