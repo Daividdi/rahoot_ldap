@@ -1,7 +1,13 @@
 FROM node:22-alpine AS base
 
-# Enable and prepare pnpm via Corepack
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# pnpm: usa o tarball vendorado (build sem internet) ou Corepack (online).
+# O glob [n] torna o COPY opcional — não falha se a pasta não existir.
+COPY offline/bi[n] /tmp/offline-bin/
+RUN if ls /tmp/offline-bin/pnpm-*.tgz >/dev/null 2>&1; then \
+      npm install -g /tmp/offline-bin/pnpm-*.tgz && rm -rf /tmp/offline-bin; \
+    else \
+      corepack enable && corepack prepare pnpm@9.15.9 --activate; \
+    fi
 
 # ----- DEPENDENCIES -----
 FROM base AS deps
@@ -12,8 +18,15 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/web/package.json ./packages/web/
 COPY packages/socket/package.json ./packages/socket/
 
-# Install only production dependencies
-RUN pnpm install --no-frozen-lockfile --prod
+# Store offline vendorada (opcional — extraída por offline/preparar.sh)
+COPY .pnpm-stor[e] ./.pnpm-store/
+
+# Install only production dependencies (offline se a store estiver presente)
+RUN if [ -d ./.pnpm-store/v3 ]; then \
+      pnpm install --offline --store-dir ./.pnpm-store --no-frozen-lockfile --prod; \
+    else \
+      pnpm install --no-frozen-lockfile --prod; \
+    fi
 
 # ----- BUILDER -----
 FROM base AS builder
@@ -22,8 +35,12 @@ WORKDIR /app
 # Copy all monorepo files
 COPY . .
 
-# Install all dependencies (including dev) for build
-RUN pnpm install --no-frozen-lockfile
+# Install all dependencies (including dev) for build (offline se a store estiver presente)
+RUN if [ -d ./.pnpm-store/v3 ]; then \
+      pnpm install --offline --store-dir ./.pnpm-store --no-frozen-lockfile; \
+    else \
+      pnpm install --no-frozen-lockfile; \
+    fi
 
 # Build Next.js app with standalone output for smaller runtime image
 WORKDIR /app/packages/web
@@ -43,10 +60,6 @@ WORKDIR /app
 # Create a non-root user for better security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
-
-
-# Enable pnpm in the runtime image
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy configuration files
 COPY pnpm-workspace.yaml package.json ./

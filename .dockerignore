@@ -1,3 +1,9 @@
 node_modules
-.pnpm-store
 .git
+# build outputs
+.next
+dist
+# pacotes offline pesados (a store extraída .pnpm-store ENTRA no contexto;
+# offline/bin também entra, pois o Dockerfile usa o tarball do pnpm)
+offline/deps
+offline/images
