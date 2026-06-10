@@ -211,10 +211,20 @@ io.on("connection", (socket) => {
 
 
   // ── Solo + Combined DB report for manager analytics ──────────────────────
-  socket.on("manager:getSoloReport", (callback: any) => {
+  // Accepts an optional { from, to } ISO date range so the dashboard period
+  // filter applies to real session/attempt dates (not quiz last-played).
+  socket.on("manager:getSoloReport", (args: any, callback?: any) => {
+    if (typeof args === "function") { callback = args; args = {} }
     if (typeof callback !== "function") return
     try {
       const d = db()
+      const from = typeof args?.from === "string" ? args.from : null
+      const to   = typeof args?.to   === "string" ? args.to   : null
+
+      // Range clauses for solo_attempts (sa.ended_at) and sessions (s.ended_at)
+      let saRange = ""; let sRange = ""; const rp: string[] = []
+      if (from) { saRange += " AND sa.ended_at >= ?"; sRange += " AND s.ended_at >= ?"; rp.push(from) }
+      if (to)   { saRange += " AND sa.ended_at < ?";  sRange += " AND s.ended_at < ?";  rp.push(to) }
 
       // Per-quiz aggregate (solo only) — all players, no ldap filter
       const quizStats = d.prepare(`
@@ -230,9 +240,10 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
+        WHERE 1=1${saRange}
         GROUP BY sa.quiz_id
         ORDER BY total_attempts DESC
-      `).all()
+      `).all(...rp)
 
       // Per-player aggregate (solo only) — all players
       const playerStats = d.prepare(`
@@ -246,9 +257,10 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
+        WHERE 1=1${saRange}
         GROUP BY sa.player_id
         ORDER BY avg_accuracy DESC, total_correct DESC
-      `).all()
+      `).all(...rp)
 
       // Per-player per-quiz detail — all players
       const detail = d.prepare(`
@@ -264,9 +276,10 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
+        WHERE 1=1${saRange}
         GROUP BY sa.player_id, sa.quiz_id
         ORDER BY p.real_name, sa.quiz_id
-      `).all()
+      `).all(...rp)
 
       // Per-player aggregate (team/classic only) — all players, no ldap filter
       const teamStats = d.prepare(`
@@ -281,9 +294,10 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
+        WHERE 1=1${sRange}
         GROUP BY sp.player_id
         ORDER BY avg_accuracy DESC
-      `).all()
+      `).all(...rp)
 
       // Per-quiz aggregate for team/classic games
       const teamQuizStats = d.prepare(`
@@ -295,10 +309,10 @@ io.on("connection", (socket) => {
           MAX(s.ended_at) AS last_played
         FROM sessions s
         JOIN session_players sp ON sp.session_id = s.id
-        WHERE s.mode = 'classic'
+        WHERE s.mode = 'classic'${sRange}
         GROUP BY s.quiz_id
         ORDER BY total_sessions DESC
-      `).all()
+      `).all(...rp)
 
       // Per-player per-quiz detail for team games
       const teamDetail = d.prepare(`
@@ -312,11 +326,59 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON sp.session_id = s.id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
+        WHERE 1=1${sRange}
         GROUP BY sp.player_id, s.quiz_id
         ORDER BY p.real_name, s.quiz_id
-      `).all()
+      `).all(...rp)
 
       callback({ ok: true, quizStats, playerStats, detail, teamStats, teamQuizStats, teamDetail })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── Participation by day — real per-session rows for a given local date ──
+  socket.on("manager:getDayParticipation", (args: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const date = typeof args?.date === "string" ? args.date : null
+      if (!date) { callback({ ok: false, error: "missing date" }); return }
+      const rows = db().prepare(`
+        SELECT p.real_name, s.quiz_id, s.quiz_title,
+          sp.points, sp.correct, sp.incorrect, sp.unanswered
+        FROM session_players sp
+        JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
+        JOIN players p ON p.id = sp.player_id
+        WHERE date(s.ended_at, 'localtime') = ?
+      `).all(date)
+      callback({ ok: true, rows })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── Real session list for the Activity view (optional date range) ────────
+  socket.on("manager:getSessionsList", (args: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const from = typeof args?.from === "string" ? args.from : null
+      const to   = typeof args?.to   === "string" ? args.to   : null
+      let range = ""; const rp: string[] = []
+      if (from) { range += " AND s.ended_at >= ?"; rp.push(from) }
+      if (to)   { range += " AND s.ended_at < ?";  rp.push(to) }
+      const rows = db().prepare(`
+        SELECT s.id AS session_id, s.quiz_id, s.quiz_title, s.ended_at,
+          COUNT(sp.id) AS player_count,
+          SUM(sp.correct) AS total_correct,
+          SUM(sp.correct + sp.incorrect + sp.unanswered) AS total_answers
+        FROM sessions s
+        JOIN session_players sp ON sp.session_id = s.id
+        WHERE s.mode = 'classic'${range}
+        GROUP BY s.id
+        ORDER BY s.ended_at DESC
+        LIMIT 50
+      `).all(...rp)
+      callback({ ok: true, rows })
     } catch (err: any) {
       callback({ ok: false, error: String(err) })
     }

@@ -152,7 +152,12 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [soloLoading, setSoloLoading] = useState(false)
   const [soloExpandedPlayer, setSoloExpandedPlayer] = useState<string | null>(null)
   const [teamExpandedPlayer, setTeamExpandedPlayer] = useState<string | null>(null)
-  const [combinedSort, setCombinedSort] = useState<"name" | "solo_acc" | "team_acc" | "solo_games" | "team_games">("name")
+  const [combinedSort, setCombinedSort] = useState<"name" | "solo_acc" | "team_acc" | "solo_games" | "team_games">("team_acc")
+  const [combinedSearch, setCombinedSearch] = useState("")
+  const [soloSearch, setSoloSearch] = useState("")
+  const [soloSort, setSoloSort] = useState<"acc" | "attempts" | "correct" | "name">("acc")
+  const [teamSearch, setTeamSearch] = useState("")
+  const [teamSort, setTeamSort] = useState<"acc" | "games" | "correct" | "name">("acc")
 
   type DiffQuestion = { questionTitle: string; quizCount: number; timesAnswered: number; timesCorrect: number; timesWrong: number; errorRate: number }
   const [diffQuestions, setDiffQuestions] = useState<DiffQuestion[] | null>(null)
@@ -171,20 +176,15 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     })
   }, [socket])
 
-  const fetchSoloReport = () => {
+  const fetchSoloReport = (range?: { from: string | null; to: string | null }) => {
     if (!socket) return
     setSoloLoading(true)
-    ;(socket as any).timeout(15000).emit("manager:getSoloReport", (err: any, data: any) => {
+    ;(socket as any).timeout(15000).emit("manager:getSoloReport", { from: range?.from ?? null, to: range?.to ?? null }, (err: any, data: any) => {
       setSoloLoading(false)
       if (!err && data) setSoloReport(data)
     })
   }
-
-  useEffect(() => {
-    if (!socket || soloReport !== null) return
-    fetchSoloReport()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket])
+  // (re)fetched whenever the period filter changes — see effect after periodRange
 
   const fetchDiffQuestions = () => {
     if (!socket) return
@@ -258,6 +258,38 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     }
     return "All time"
   }, [pFilter, pOffset])
+
+  // ISO date range matching the period filter — sent to the server so the
+  // Solo/Team/All-Players reports and the Activity list filter by real
+  // session dates instead of each quiz's last-played date.
+  const periodRange = useMemo(() => {
+    if (pFilter === "month") {
+      const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); d.setMonth(d.getMonth() + pOffset)
+      const end = new Date(d); end.setMonth(end.getMonth() + 1)
+      return { from: d.toISOString(), to: end.toISOString() }
+    }
+    if (pFilter === "week") {
+      const d = new Date(); const dow = d.getDay()
+      d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1) + pOffset * 7); d.setHours(0, 0, 0, 0)
+      const end = new Date(d); end.setDate(end.getDate() + 7)
+      return { from: d.toISOString(), to: end.toISOString() }
+    }
+    return { from: null as string | null, to: null as string | null }
+  }, [pFilter, pOffset])
+
+  useEffect(() => {
+    if (!socket) return
+    fetchSoloReport(periodRange)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, periodRange])
+
+  const [sessionRows, setSessionRows] = useState<any[] | null>(null)
+  useEffect(() => {
+    if (!socket) return
+    ;(socket as any).timeout(15000).emit("manager:getSessionsList", { from: periodRange.from, to: periodRange.to }, (err: any, data: any) => {
+      if (!err && data?.ok) setSessionRows(data.rows)
+    })
+  }, [socket, periodRange])
 
   const data = useMemo(() => {
     try {
@@ -503,18 +535,32 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     } catch { return [] }
   }, [filtered])
 
+  // Real sessions from the database (period-filtered server-side) — the old
+  // version listed quizzes by last-played, hiding earlier sessions entirely.
   const recent = useMemo(() => {
     try {
-      return filtered.filter(q => q.playerCount > 0)
-        .sort((a, b) => (b.playedDate?.getTime() || 0) - (a.playedDate?.getTime() || 0))
-        .slice(0, 20).map(q => {
-          let c = 0, t = 0
-          q.stats.forEach((p: any) => (p?.answers || []).forEach((a: any) => { t++; if (a?.isCorrect) c++ }))
-          const dur = q.questions.reduce((a: number, x: any) => a + (x?.time || 15) + (x?.cooldown || 5), 0)
-          return { ...q, acc: t > 0 ? Math.round(c / t * 100) : 0, dur: Math.round(dur / 60 * 10) / 10 }
+      if (!sessionRows) return []
+      const quizById = new Map(data.map(q => [q.id, q]))
+      return sessionRows
+        .map((r: any) => {
+          const q = quizById.get(r.quiz_id)
+          return {
+            sessionId: r.session_id,
+            id: r.quiz_id,
+            subject: q?.subject || r.quiz_title,
+            createdBy: q?.createdBy || "System",
+            region: q?.region || "BR",
+            group: q?.group || "",
+            questions: q?.questions || [],
+            playerCount: r.player_count || 0,
+            lastPlayedAt: (() => { try { return new Date(r.ended_at).toLocaleString("en-US") } catch { return r.ended_at || "--" } })(),
+            acc: r.total_answers > 0 ? Math.round((r.total_correct / r.total_answers) * 100) : 0,
+          }
         })
+        .filter((s: any) => rFilter === "all" || s.region === rFilter)
+        .slice(0, 20)
     } catch { return [] }
-  }, [filtered])
+  }, [sessionRows, data, rFilter])
 
   const authors = useMemo(() => { try { return [...new Set(data.map(q => q.createdBy))].sort() } catch { return [] } }, [data])
   const allCategories = useMemo(() => { try { return [...new Set(data.map(q => q.category))].sort() } catch { return [] } }, [data])
@@ -614,47 +660,23 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     } catch { return { ATP: [], ATD: [], Others: [] } }
   }, [data, rankingGroups, nameCorrections, applyName, minGames, lbStartDate])
 
+  // The report is already period-filtered server-side, so it is the single
+  // source of truth for every period (all/month/week).
   const combinedRows = useMemo(() => {
-    if (pFilter === "all" && soloReport?.ok) {
-      const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
-      const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
-      const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
-      return allNames.map(name => ({
-        name,
-        solo_games: soloMap.get(name)?.total_attempts ?? 0,
-        solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
-        solo_correct: soloMap.get(name)?.total_correct ?? 0,
-        team_games: teamMap.get(name)?.games_played ?? 0,
-        team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
-        team_correct: teamMap.get(name)?.total_correct ?? 0,
-      }))
-    }
-    // Build from filtered (period-filtered) data
-    const p: Record<string, { name: string; games: number; c: number; t: number; pts: number }> = {}
-    filtered.forEach(q => q.stats.forEach((s: any) => {
-      const key = s?.clientId || s?.realName || s?.username || s?.name || ""; if (!key) return
-      const _name = applyName(key, s?.realName || s?.username || s?.name || key); if (isExcluded(_name)) return
-      if (!p[key]) p[key] = { name: _name, games: 0, c: 0, t: 0, pts: 0 }
-      p[key].name = applyName(key, s?.realName || s?.username || s?.name || key)
-      p[key].games++; p[key].pts += s?.points || 0
-      ;(s?.answers || []).forEach((a: any) => { p[key].t++; if (a?.isCorrect) p[key].c++ })
+    if (!soloReport?.ok) return []
+    const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
+    const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
+    const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
+    return allNames.map(name => ({
+      name,
+      solo_games: soloMap.get(name)?.total_attempts ?? 0,
+      solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
+      solo_correct: soloMap.get(name)?.total_correct ?? 0,
+      team_games: teamMap.get(name)?.games_played ?? 0,
+      team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
+      team_correct: teamMap.get(name)?.total_correct ?? 0,
     }))
-    const nameMap: Record<string, string> = {}; const merged: typeof p = {}
-    Object.entries(p).forEach(([key, val]) => {
-      const norm = val.name.toLowerCase().trim()
-      if (nameMap[norm]) { const ek = nameMap[norm]; merged[ek].games += val.games; merged[ek].c += val.c; merged[ek].t += val.t; merged[ek].pts += val.pts }
-      else { nameMap[norm] = key; merged[key] = { ...val } }
-    })
-    return Object.values(merged).map(v => ({
-      name: v.name,
-      team_games: v.games,
-      team_acc: v.t > 0 ? Math.round(v.c / v.t * 100) : 0,
-      team_correct: v.c,
-      solo_games: 0,
-      solo_acc: 0,
-      solo_correct: 0,
-    }))
-  }, [filtered, pFilter, soloReport, nameCorrections, applyName])
+  }, [soloReport])
 
   const maxCC = Math.max(...categories.map(c => c.count), 1)
   const maxGQ = Math.max(...Object.values(groupStats).map(g => g.q), 1)
@@ -665,23 +687,31 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [participationRegion, setParticipationRegion] = useState<"all" | "BR" | "MY" | "CN">("all")
   useEffect(() => { if (activeView === "participation") setParticipationRegion(rFilter as "all" | "BR" | "MY" | "CN") }, [rFilter, activeView])
 
-  const dayParticipation = useMemo(() => {
-    if (!participationDate) return []
-    const [yr, mo, dy] = participationDate.split("-").map(Number)
-    const dayQuizzes = data.filter(q => {
-      const d = q.playedDate || q.date
-      return d && d.getFullYear() === yr && d.getMonth() === mo - 1 && d.getDate() === dy
-        && (participationRegion === "all" || q.region === participationRegion)
+  // Real per-session rows for the picked day, straight from the database —
+  // the old version only saw each quiz's LAST session, hiding earlier games.
+  const [dayRows, setDayRows] = useState<any[] | null>(null)
+  useEffect(() => {
+    if (!socket || !participationDate) { setDayRows(null); return }
+    ;(socket as any).timeout(15000).emit("manager:getDayParticipation", { date: participationDate }, (err: any, res: any) => {
+      setDayRows(!err && res?.ok ? res.rows : [])
     })
+  }, [socket, participationDate])
+
+  const dayParticipation = useMemo(() => {
+    if (!participationDate || !dayRows) return []
+    const regionOf = new Map(data.map(q => [q.id, q.region]))
     const players: Record<string, { name: string; count: number; pts: number; c: number; t: number; quizzes: string[] }> = {}
-    dayQuizzes.forEach(q => q.stats.forEach((s: any) => {
-      const key = s?.clientId || s?.realName || s?.username || s?.name || ""; if (!key) return
-      const display = applyName(key, s?.realName || s?.username || s?.name || key)
+    dayRows.forEach((r: any) => {
+      const region = regionOf.get(r.quiz_id) || "BR"
+      if (participationRegion !== "all" && region !== participationRegion) return
+      const key = r.real_name || ""; if (!key) return
+      const display = applyName(key, key)
       if (!players[key]) players[key] = { name: display, count: 0, pts: 0, c: 0, t: 0, quizzes: [] }
-      players[key].count++; players[key].pts += s?.points || 0
-      ;(s?.answers || []).forEach((a: any) => { players[key].t++; if (a?.isCorrect) players[key].c++ })
-      if (!players[key].quizzes.includes(q.subject)) players[key].quizzes.push(q.subject)
-    }))
+      players[key].count++; players[key].pts += r.points || 0
+      players[key].c += r.correct || 0
+      players[key].t += (r.correct || 0) + (r.incorrect || 0) + (r.unanswered || 0)
+      if (!players[key].quizzes.includes(r.quiz_title)) players[key].quizzes.push(r.quiz_title)
+    })
     const nameMap: Record<string, string> = {}; const merged: typeof players = {}
     Object.entries(players).forEach(([key, val]) => {
       const norm = val.name.toLowerCase().trim()
@@ -695,7 +725,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     else if (participationSort === "pts") result.sort((a, b) => b.pts - a.pts)
     else result.sort((a, b) => a.name.localeCompare(b.name))
     return result
-  }, [data, participationDate, participationSort, participationRegion, nameCorrections, applyName])
+  }, [data, dayRows, participationDate, participationSort, participationRegion, nameCorrections, applyName])
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
 
@@ -1457,7 +1487,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             <div className="flex flex-col gap-5">
               <div className="flex items-center justify-between">
                 <div/>
-                <button onClick={() => { setSoloReport(null); fetchSoloReport() }}
+                <button onClick={() => { setSoloReport(null); fetchSoloReport(periodRange) }}
                   disabled={soloLoading}
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40">
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -1468,11 +1498,17 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               {soloReport && !soloReport.ok && <div className="rounded-2xl bg-red-50 px-6 py-4 text-sm text-red-600">Failed to load: {(soloReport as any).error}</div>}
               {soloReport && soloReport.ok && (() => {
                 const qs = soloReport.quizStats
-                const ps = soloReport.playerStats
+                const psAll = soloReport.playerStats
                 const det = soloReport.detail
                 const totalAttempts = qs.reduce((s, q) => s + q.total_attempts, 0)
-                const uniquePlayers = ps.length
-                const avgAcc = ps.length > 0 ? Math.round(ps.reduce((s, p) => s + p.avg_accuracy, 0) / ps.length) : 0
+                const uniquePlayers = psAll.length
+                const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
+                const q2 = soloSearch.trim().toLowerCase()
+                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) =>
+                  soloSort === "name" ? a.real_name.localeCompare(b.real_name)
+                  : soloSort === "attempts" ? b.total_attempts - a.total_attempts
+                  : soloSort === "correct" ? b.total_correct - a.total_correct
+                  : (b.avg_accuracy - a.avg_accuracy) || (b.total_correct - a.total_correct))
                 return (<>
                   {/* KPI cards */}
                   <div className="grid grid-cols-3 gap-4">
@@ -1531,9 +1567,28 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
 
                   {/* Player breakdown */}
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="mb-4 text-base font-semibold text-gray-800">By Player</h3>
+                    <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                      <h3 className="text-base font-semibold text-gray-800">By Player</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={soloSearch}
+                          onChange={e => setSoloSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                          {([["acc", "Accuracy"], ["attempts", "Attempts"], ["correct", "Correct"], ["name", "Name"]] as const).map(([id, label], si) => (
+                            <button key={id} onClick={() => setSoloSort(id)}
+                              className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", si > 0 ? "border-l border-gray-200" : "",
+                                soloSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                     {ps.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-8">No solo attempts yet</p>
+                      <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No solo attempts yet"}</p>
                     ) : (
                       <div className="flex flex-col gap-1">
                         <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}>
@@ -1597,7 +1652,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             <div className="flex flex-col gap-5">
               <div className="flex items-center justify-between">
                 <div/>
-                <button onClick={() => { setSoloReport(null); fetchSoloReport() }}
+                <button onClick={() => { setSoloReport(null); fetchSoloReport(periodRange) }}
                   disabled={soloLoading}
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40">
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -1608,11 +1663,17 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               {soloReport && !soloReport.ok && <div className="rounded-2xl bg-red-50 px-6 py-4 text-sm text-red-600">Failed to load: {(soloReport as any).error}</div>}
               {soloReport && soloReport.ok && (() => {
                 const qs = soloReport.teamQuizStats ?? []
-                const ps = soloReport.teamStats ?? []
+                const psAll = soloReport.teamStats ?? []
                 const det = soloReport.teamDetail ?? []
                 const totalSessions = qs.reduce((s, q) => s + q.total_sessions, 0)
-                const uniquePlayers = ps.length
-                const avgAcc = ps.length > 0 ? Math.round(ps.reduce((s, p) => s + p.avg_accuracy, 0) / ps.length) : 0
+                const uniquePlayers = psAll.length
+                const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
+                const q2 = teamSearch.trim().toLowerCase()
+                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) =>
+                  teamSort === "name" ? a.real_name.localeCompare(b.real_name)
+                  : teamSort === "games" ? b.games_played - a.games_played
+                  : teamSort === "correct" ? b.total_correct - a.total_correct
+                  : (b.avg_accuracy - a.avg_accuracy) || (b.total_correct - a.total_correct))
                 return (<>
                   {/* KPI cards */}
                   <div className="grid grid-cols-3 gap-4">
@@ -1671,9 +1732,28 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
 
                   {/* Player breakdown */}
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                    <h3 className="mb-4 text-base font-semibold text-gray-800">By Player</h3>
+                    <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                      <h3 className="text-base font-semibold text-gray-800">By Player</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={teamSearch}
+                          onChange={e => setTeamSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                          {([["acc", "Accuracy"], ["games", "Games"], ["correct", "Correct"], ["name", "Name"]] as const).map(([id, label], si) => (
+                            <button key={id} onClick={() => setTeamSort(id)}
+                              className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", si > 0 ? "border-l border-gray-200" : "",
+                                teamSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                     {ps.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-8">No team sessions yet</p>
+                      <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No team sessions yet"}</p>
                     ) : (
                       <div className="flex flex-col gap-1">
                         <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}>
@@ -1735,9 +1815,10 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           {/* ── COMBINED (All Players) ─────────────────────────────────────── */}
           {(activeView === "combined") && (
             <div className="flex flex-col gap-5">
-              {soloLoading && pFilter === "all" && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
-              {(combinedRows.length > 0 || (pFilter !== "all")) && (() => {
-                const rows = combinedRows
+              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
+              {!soloLoading && (() => {
+                const cq = combinedSearch.trim().toLowerCase()
+                const rows = cq ? combinedRows.filter(r => r.name.toLowerCase().includes(cq)) : combinedRows
 
                 const sorted = [...rows].sort((a, b) => {
                   if (combinedSort === "name") return a.name.localeCompare(b.name)
@@ -1760,12 +1841,20 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">All Players — Team &amp; Solo</h3>
-                      <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                        <SortBtn id="name" label="Name" />
-                        <SortBtn id="team_acc" label="Team acc" />
-                        <SortBtn id="solo_acc" label="Solo acc" />
-                        <SortBtn id="team_games" label="Team games" />
-                        <SortBtn id="solo_games" label="Solo attempts" />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={combinedSearch}
+                          onChange={e => setCombinedSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                          <SortBtn id="team_acc" label="Team acc" />
+                          <SortBtn id="solo_acc" label="Solo acc" />
+                          <SortBtn id="team_games" label="Team games" />
+                          <SortBtn id="solo_games" label="Solo attempts" />
+                          <SortBtn id="name" label="Name" />
+                        </div>
                       </div>
                     </div>
 
@@ -1825,7 +1914,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               <div className="flex flex-col gap-2.5">
                 {recent.map((s, i) => {
                   const cancelled = localCancelled[s.id] || []
-                  const isExpanded = expandedSession === s.id
+                  const isExpanded = expandedSession === s.sessionId
                   return (
                     <div key={i} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all bg-gray-50">
                       <div className="flex items-center gap-3 px-4 py-4">
@@ -1842,7 +1931,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           <Tag region={s.region}/>
                           <svg width="14" height="14" fill="none" stroke="#cbd5e1" strokeWidth="2.5" viewBox="0 0 24 24" className="shrink-0"><path d="M9 18l6-6-6-6"/></svg>
                         </div>
-                        <button onClick={() => setExpandedSession(isExpanded ? null : s.id)}
+                        <button onClick={() => setExpandedSession(isExpanded ? null : s.sessionId)}
                           className={clsx("shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                             cancelled.length > 0 ? "bg-red-100 text-red-700 hover:bg-red-200" : isExpanded ? "bg-primary/10 text-primary" : "bg-gray-200 text-gray-500 hover:bg-gray-300")}>
                           {isExpanded ? "▲ Close" : `Questions${cancelled.length > 0 ? ` (${cancelled.length}✕)` : ""}`}
