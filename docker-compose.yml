@@ -2,8 +2,31 @@ services:
   rahoot2:
     build: .
     container_name: rahoot2
+    command: ["node", "packages/web/server.js"]
     ports:
       - "${WEB_PORT:-3003}:3000"
+    volumes:
+      - ../config:/app/config
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - WEB_ORIGIN=${WEB_ORIGIN}
+      - SOCKET_URL=${SOCKET_URL}
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  rahoot2-socket:
+    build: .
+    container_name: rahoot2-socket
+    command: ["node", "packages/socket/dist/index.cjs"]
+    ports:
       - "${SOCKET_PORT:-3002}:3001"
     volumes:
       - ../config:/app/config
@@ -20,7 +43,7 @@ services:
     image: nginx:alpine
     container_name: rahoot2-nginx
     ports:
-      - "80:80"
+      - "${NGINX_PORT:-80}:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ../images:/usr/share/nginx/html/images:ro

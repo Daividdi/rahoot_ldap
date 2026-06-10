@@ -295,6 +295,10 @@ server {
 
     client_max_body_size 50M;
 
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
     location /images/ {
         alias /usr/share/nginx/html/images/;
         autoindex off;
