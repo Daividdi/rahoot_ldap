@@ -1,45 +1,57 @@
-# Instalação offline
+# Offline installation
 
-Esta pasta contém tudo o que o projeto precisa para ser construído e
-executado numa máquina **sem acesso à internet**:
+This folder contains everything the project needs to be built and run on a
+machine **without internet access**:
 
-| Conteúdo            | Descrição                                                        |
+| Contents            | Description                                                      |
 |---------------------|------------------------------------------------------------------|
-| `deps/`             | Store do pnpm com todas as dependências do `pnpm-lock.yaml` (tar dividido em partes de 90MB) |
-| `images/`           | Imagens Docker base (`node:22-alpine`, `nginx:alpine`)           |
-| `bin/`              | Tarball do pnpm 9.15.9 (instalado dentro do container no build)  |
+| `deps/`             | pnpm store with every dependency in `pnpm-lock.yaml` (glibc + musl, tar split into 90MB parts) |
+| `images/`           | Base Docker images (`node:22-alpine`, `nginx:alpine`)            |
+| `bin/`              | pnpm 9.15.9 tarball (installed inside the container at build time) |
+| `assets/`           | 3D avatars, icons and animations (~590MB, 90MB parts)            |
+| `install-server.sh` | Full installer for a fresh server (see below)                    |
+| `prepare.sh`        | Extracts store + Docker images only (used by the installer)      |
+| `pack-deps.sh`      | Regenerates the dependency packages (machine with internet)      |
 
-## Como usar (máquina sem internet)
+## Fresh server (clean install, no internet)
 
 ```bash
-git clone <este repositório>   # ou copie via pendrive/rede interna
+git clone <this repository>   # or copy it via USB drive / internal network
 cd rahoot
-./offline/preparar.sh          # extrai a store e carrega as imagens Docker
-docker compose build           # build 100% local
-docker compose up -d
+sudo ./offline/install-server.sh
 ```
 
-O `Dockerfile` detecta automaticamente a store extraída (`.pnpm-store/`)
-e o tarball do pnpm (`offline/bin/`) e instala tudo sem rede. Se a store
-não estiver extraída, o build volta a usar a internet normalmente.
+The installer prompts for and configures everything interactively:
 
-## Como atualizar os pacotes (máquina com internet)
+- Server **FQDN** (and optionally the system hostname)
+- Ports (nginx/web, socket) and timezone
+- **LDAP/AD credentials** (optional)
+- **New admin password** (or generates a random one)
+- Extracts dependencies, Docker images and 3D avatars from the repo packages
+- Generates local `.env` (mode 600) and `nginx.conf` — **never committed**
+- Creates a clean `config/`: no game database, no rankings, no sessions
+- Builds 100% offline and starts the containers
 
-Sempre que o `pnpm-lock.yaml` mudar, regenere os pacotes e commite:
+Prerequisite on the target machine: Docker + compose plugin already
+installed (from your internal mirror). That is the only thing the
+installer does not bring along.
+
+## Updating the dependency packages (machine with internet)
+
+Whenever `pnpm-lock.yaml` changes:
 
 ```bash
-./offline/empacotar.sh
+./offline/pack-deps.sh
 git add offline/
-git commit -m "chore: atualiza pacotes offline"
+git commit -m "chore: update offline packages"
 ```
 
-## Observações
+## Notes
 
-- Os arquivos são divididos em partes de 90MB porque o GitHub recusa
-  arquivos maiores que 100MB.
-- A pasta `.pnpm-store/` extraída fica fora do git (`.gitignore`) e fora
-  das partes pesadas do contexto Docker — apenas as partes em `offline/`
-  são versionadas.
-- Os avatares 3D (`config/avatars-3d`, ~590MB) são dados de runtime e não
-  ficam no repositório: copie a pasta `config/` junto com o projeto ao
-  levar para outra máquina.
+- Files are split into 90MB parts because GitHub rejects files larger
+  than 100MB.
+- The extracted `.pnpm-store/` stays out of git (`.gitignore`) and the
+  heavy parts (`offline/deps`, `offline/images`, `offline/assets`) stay
+  out of the Docker build context (`.dockerignore`).
+- The real `.env` (domains, LDAP credentials, passwords) never goes into
+  git — use `.env.example` as a reference.

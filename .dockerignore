@@ -3,7 +3,8 @@ node_modules
 # build outputs
 .next
 dist
-# pacotes offline pesados (a store extraída .pnpm-store ENTRA no contexto;
-# offline/bin também entra, pois o Dockerfile usa o tarball do pnpm)
+# heavy offline packages (the extracted .pnpm-store DOES enter the context;
+# offline/bin too, since the Dockerfile uses the pnpm tarball)
 offline/deps
 offline/images
+offline/assets
