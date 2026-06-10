@@ -1,7 +1,7 @@
 FROM node:22-alpine AS base
 
-# pnpm: usa o tarball vendorado (build sem internet) ou Corepack (online).
-# O glob [n] torna o COPY opcional — não falha se a pasta não existir.
+# pnpm: vendored tarball (offline build) or Corepack (online).
+# The [n] glob makes the COPY optional — it won't fail if the folder is absent.
 COPY offline/bi[n] /tmp/offline-bin/
 RUN if ls /tmp/offline-bin/pnpm-*.tgz >/dev/null 2>&1; then \
       npm install -g /tmp/offline-bin/pnpm-*.tgz && rm -rf /tmp/offline-bin; \
@@ -9,44 +9,33 @@ RUN if ls /tmp/offline-bin/pnpm-*.tgz >/dev/null 2>&1; then \
       corepack enable && corepack prepare pnpm@9.15.9 --activate; \
     fi
 
-# ----- DEPENDENCIES -----
-FROM base AS deps
-WORKDIR /app
-
-# Copy pnpm configuration files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY packages/web/package.json ./packages/web/
-COPY packages/socket/package.json ./packages/socket/
-
-# Store offline vendorada (opcional — extraída por offline/preparar.sh)
-COPY .pnpm-stor[e] ./.pnpm-store/
-
-# Install only production dependencies (offline se a store estiver presente)
-RUN if [ -d ./.pnpm-store/v3 ]; then \
-      pnpm install --offline --store-dir ./.pnpm-store --no-frozen-lockfile --prod; \
-    else \
-      pnpm install --no-frozen-lockfile --prod; \
-    fi
-
 # ----- BUILDER -----
 FROM base AS builder
 WORKDIR /app
 
-# Copy all monorepo files
-COPY . .
+# Manifests first, so the install layer stays cached across source-only changes
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/web/package.json ./packages/web/
+COPY packages/socket/package.json ./packages/socket/
+COPY packages/common/package.json ./packages/common/
 
-# Install all dependencies (including dev) for build (offline se a store estiver presente)
+# Vendored offline store (optional — extracted by offline/prepare.sh)
+COPY .pnpm-stor[e] ./.pnpm-store/
+
+# Install all dependencies (offline when the store is present)
 RUN if [ -d ./.pnpm-store/v3 ]; then \
       pnpm install --offline --store-dir ./.pnpm-store --no-frozen-lockfile; \
     else \
       pnpm install --no-frozen-lockfile; \
     fi
 
-# Build Next.js app with standalone output for smaller runtime image
-WORKDIR /app/packages/web
+# Copy the rest of the monorepo (node_modules survives — it is dockerignored)
+COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Build Next.js app with standalone output for smaller runtime image
+WORKDIR /app/packages/web
 RUN pnpm build
 
 # Build socket server if needed (TypeScript or similar)
