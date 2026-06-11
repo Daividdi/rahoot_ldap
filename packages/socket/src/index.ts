@@ -43,8 +43,8 @@ const buildRoomList = (game: any) =>
 
 const port = 3001
 
-// 60s cache for the difficult-questions analytics (expensive full scan)
-let difficultQuestionsCache: { at: number; questions: any[] } | null = null
+// 60s cache for the difficult-questions analytics (expensive full scan), keyed by period filter
+const difficultQuestionsCache = new Map<string, { at: number; questions: any[] }>()
 
 console.log(`Socket server running on port ${port}`)
 io.listen(Number(port))
@@ -860,32 +860,41 @@ io.on("connection", (socket) => {
   // ── Difficult questions analytics (per-question error rates) ─────────────
   // Full-table scan + JSON.parse of every answers blob — cached for 60s so
   // repeated dashboard opens don't re-run it.
-  socket.on("manager:getDifficultQuestions", (callback: any) => {
+  socket.on("manager:getDifficultQuestions", (args: any, callback?: any) => {
+    // Back-compat: older clients emit with the callback as the only argument
+    if (typeof args === "function") { callback = args; args = {} }
     if (typeof callback !== "function") return
-    if (difficultQuestionsCache && Date.now() - difficultQuestionsCache.at < 60_000) {
-      callback({ ok: true, questions: difficultQuestionsCache.questions })
+    const days = Number(args?.days) > 0 ? Math.floor(Number(args.days)) : 0
+    const cacheKey = String(days)
+    const cached = difficultQuestionsCache.get(cacheKey)
+    if (cached && Date.now() - cached.at < 60_000) {
+      callback({ ok: true, questions: cached.questions })
       return
     }
     try {
       const d = db()
+      // ended_at is ISO 8601, so a string comparison filters by date correctly
+      const dateFilter = days > 0 ? " AND s.ended_at >= ?" : ""
+      const params = days > 0 ? [new Date(Date.now() - days * 86_400_000).toISOString()] : []
       const rows = d.prepare(`
-        SELECT sp.answers_json, s.quiz_id, s.quiz_title
+        SELECT sp.answers_json, s.quiz_id, s.quiz_title, s.ended_at
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id
-        WHERE sp.answers_json IS NOT NULL
-      `).all() as any[]
+        WHERE sp.answers_json IS NOT NULL${dateFilter}
+      `).all(...params) as any[]
 
-      const qmap: Record<string, { questionTitle: string; quizzes: Set<string>; timesAnswered: number; timesCorrect: number }> = {}
+      const qmap: Record<string, { questionTitle: string; quizzes: Set<string>; timesAnswered: number; timesCorrect: number; lastAnswered: string }> = {}
       for (const row of rows) {
         try {
           const answers = JSON.parse(row.answers_json) as any[]
           for (const ans of answers) {
             const title = (ans.questionTitle || "").trim()
             if (!title) continue
-            if (!qmap[title]) qmap[title] = { questionTitle: title, quizzes: new Set(), timesAnswered: 0, timesCorrect: 0 }
+            if (!qmap[title]) qmap[title] = { questionTitle: title, quizzes: new Set(), timesAnswered: 0, timesCorrect: 0, lastAnswered: "" }
             qmap[title].timesAnswered++
             if (ans.isCorrect) qmap[title].timesCorrect++
             qmap[title].quizzes.add(row.quiz_id)
+            if ((row.ended_at || "") > qmap[title].lastAnswered) qmap[title].lastAnswered = row.ended_at
           }
         } catch {}
       }
@@ -899,11 +908,12 @@ io.on("connection", (socket) => {
           timesCorrect: q.timesCorrect,
           timesWrong: q.timesAnswered - q.timesCorrect,
           errorRate: Math.round((1 - q.timesCorrect / q.timesAnswered) * 100),
+          lastAnswered: q.lastAnswered || null,
         }))
         .sort((a, b) => b.errorRate - a.errorRate || b.timesAnswered - a.timesAnswered)
         .slice(0, 100)
 
-      difficultQuestionsCache = { at: Date.now(), questions: result }
+      difficultQuestionsCache.set(cacheKey, { at: Date.now(), questions: result })
       callback({ ok: true, questions: result })
     } catch (err: any) {
       callback({ ok: false, error: String(err) })

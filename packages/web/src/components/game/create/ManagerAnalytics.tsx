@@ -199,9 +199,10 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [teamSearch, setTeamSearch] = useState("")
   const [teamSort, setTeamSort] = useState<{ key: "acc" | "games" | "rank" | "correct" | "points" | "name"; dir: SortDir }>({ key: "acc", dir: "desc" })
 
-  type DiffQuestion = { questionTitle: string; quizCount: number; timesAnswered: number; timesCorrect: number; timesWrong: number; errorRate: number }
+  type DiffQuestion = { questionTitle: string; quizCount: number; timesAnswered: number; timesCorrect: number; timesWrong: number; errorRate: number; lastAnswered?: string | null }
   const [diffQuestions, setDiffQuestions] = useState<DiffQuestion[] | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
+  const [diffDays, setDiffDays] = useState<number>(30) // 0 = all time
   const [bankTitle, setBankTitle] = useState("Question Bank")
   const [bankSelected, setBankSelected] = useState<Set<string>>(new Set())
   const [bankSaving, setBankSaving] = useState(false)
@@ -226,20 +227,20 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   }
   // (re)fetched whenever the period filter changes — see effect after periodRange
 
-  const fetchDiffQuestions = () => {
+  const fetchDiffQuestions = (days?: number) => {
     if (!socket) return
     setDiffLoading(true)
-    ;(socket as any).timeout(20000).emit("manager:getDifficultQuestions", (err: any, data: any) => {
+    ;(socket as any).timeout(20000).emit("manager:getDifficultQuestions", { days: days ?? diffDays }, (err: any, data: any) => {
       setDiffLoading(false)
       if (!err && data?.ok) setDiffQuestions(data.questions)
     })
   }
 
   useEffect(() => {
-    if (!socket || diffQuestions !== null) return
-    fetchDiffQuestions()
+    if (!socket) return
+    fetchDiffQuestions(diffDays)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket])
+  }, [socket, diffDays])
 
   const saveBankQuiz = () => {
     if (!socket || bankSelected.size === 0) return
@@ -1206,27 +1207,69 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             {/* Weekly engagement — active players + retention */}
             {engagement && engagement.length > 1 && (() => {
               const maxActive = Math.max(...engagement.map((w: any) => w.active), 1)
+              const VW = 600, VH = 200, PX = 36, PYT = 26, PYB = 30, GAP = engagement.length > 8 ? 4 : 8
+              const chartH = VH - PYT - PYB
+              const n = engagement.length
+              const slotW = (VW - 2 * PX) / n
+              const barW = Math.max(slotW - GAP, 4)
+              const retColor = (r: number) => (r >= 70 ? "#16a34a" : r >= 40 ? "#f59e0b" : "#ef4444")
+              const withRet = engagement.map((w: any, i: number) => ({ ...w, i })).filter((w: any) => w.retention != null)
+              const retPath = withRet.map((w: any, idx: number) => {
+                const cx = PX + w.i * slotW + GAP / 2 + barW / 2
+                const cy = PYT + (1 - w.retention / 100) * chartH
+                return `${idx === 0 ? "M" : "L"}${cx.toFixed(1)},${cy.toFixed(1)}`
+              }).join(" ")
               return (
                 <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                  <div className="mb-4">
-                    <h3 className="text-base font-semibold text-gray-800">Weekly Engagement</h3>
-                    <p className="text-sm text-gray-400 mt-0.5">Active players per week · retention = % of previous week&apos;s players who came back</p>
+                  <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-800">Weekly Engagement</h3>
+                      <p className="text-sm text-gray-400 mt-0.5">Active players per week · retention = % of previous week&apos;s players who came back</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-400">
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-primary/70"/>&nbsp;Active players</span>
+                      <span className="flex items-center gap-1.5"><span className="inline-block w-6 border-t-2 border-dashed border-green-500"/>&nbsp;Retention %</span>
+                    </div>
                   </div>
-                  <div className="flex items-end gap-2" style={{ height: 140 }}>
-                    {engagement.map((w: any) => {
-                      const h = Math.max(Math.round((w.active / maxActive) * 100), 4)
-                      const ret = w.retention
-                      const retColor = ret == null ? "text-gray-300" : ret >= 70 ? "text-green-600" : ret >= 40 ? "text-amber-500" : "text-red-500"
+                  <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }}>
+                    <defs>
+                      <linearGradient id="engBarGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#009edf" stopOpacity="0.9"/>
+                        <stop offset="100%" stopColor="#009edf" stopOpacity="0.45"/>
+                      </linearGradient>
+                    </defs>
+                    {/* Grid lines */}
+                    {[0.25, 0.5, 0.75, 1].map(f => {
+                      const gy = PYT + (1 - f) * chartH
+                      return <line key={f} x1={PX} y1={gy.toFixed(1)} x2={VW - PX} y2={gy.toFixed(1)} stroke="#f1f5f9" strokeWidth="1"/>
+                    })}
+                    {/* Bars */}
+                    {engagement.map((w: any, i: number) => {
+                      const bx = PX + i * slotW + GAP / 2
+                      const h = Math.max((w.active / maxActive) * chartH, w.active > 0 ? 3 : 0)
+                      const barTop = VH - PYB - h
                       return (
-                        <div key={w.week} className="flex flex-1 flex-col items-center justify-end gap-1 min-w-0" title={`${w.week}: ${w.active} active${ret != null ? ` · ${ret}% retention` : ""}`}>
-                          <span className="text-[10px] font-bold tabular-nums text-gray-600">{w.active}</span>
-                          <div className="w-full max-w-[34px] rounded-t-md bg-primary/70 hover:bg-primary transition-colors" style={{ height: `${h}%` }} />
-                          <span className={clsx("text-[9px] font-bold tabular-nums", retColor)}>{ret != null ? `${ret}%` : "—"}</span>
-                          <span className="text-[9px] text-gray-400 truncate">W{(w.week || "").split("-W")[1] || w.week}</span>
-                        </div>
+                        <g key={w.week}>
+                          {h > 0 && <rect x={bx.toFixed(1)} y={barTop.toFixed(1)} width={barW.toFixed(1)} height={h.toFixed(1)} rx="4" fill="url(#engBarGrad)"/>}
+                          {w.active > 0 && <text x={(bx + barW / 2).toFixed(1)} y={(barTop - 5).toFixed(1)} textAnchor="middle" fontSize="10" fill="#374151" fontWeight="600" fontFamily="inherit">{w.active}</text>}
+                          <text x={(bx + barW / 2).toFixed(1)} y={(VH - 8).toFixed(1)} textAnchor="middle" fontSize={n > 10 ? "9" : "10"} fill="#9ca3af" fontWeight="500" fontFamily="inherit">W{(w.week || "").split("-W")[1] || w.week}</text>
+                          <title>{`${w.week}: ${w.active} active${w.retention != null ? ` · ${w.retention}% retention` : ""}`}</title>
+                        </g>
                       )
                     })}
-                  </div>
+                    {/* Retention line (green dashed, 0-100 scale) */}
+                    {withRet.length >= 2 && <path d={retPath} fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3"/>}
+                    {withRet.map((w: any, idx: number) => {
+                      const cx = PX + w.i * slotW + GAP / 2 + barW / 2
+                      const cy = PYT + (1 - w.retention / 100) * chartH
+                      return (
+                        <g key={`ret-${idx}`}>
+                          <circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r="3.5" fill="white" stroke={retColor(w.retention)} strokeWidth="2"/>
+                          <text x={cx.toFixed(1)} y={(cy - 7).toFixed(1)} textAnchor="middle" fontSize="9" fill={retColor(w.retention)} fontWeight="600" fontFamily="inherit">{w.retention}%</text>
+                        </g>
+                      )
+                    })}
+                  </svg>
                 </div>
               )
             })()}
@@ -1400,9 +1443,18 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
 
             {/* Hardest Questions — full width */}
             <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Hardest Questions</p>
-                <button onClick={() => setActiveView("question_bank")} className="text-[10px] font-semibold text-primary hover:text-primary/70 transition-colors">Question bank →</button>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                    {([[7, "7 days"], [30, "30 days"], [90, "90 days"], [0, "All time"]] as const).map(([d, label], i) => (
+                      <button key={d} onClick={() => setDiffDays(d)}
+                        className={clsx("px-2.5 py-1 text-[10px] font-semibold transition-colors", i > 0 ? "border-l border-gray-200" : "",
+                          diffDays === d ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>{label}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setActiveView("question_bank")} className="text-[10px] font-semibold text-primary hover:text-primary/70 transition-colors">Question bank →</button>
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 {(diffLoading || diffQuestions === null) && (
@@ -1418,6 +1470,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                       <div className="flex items-center gap-3 mb-1.5">
                         <AccRing v={100 - q.errorRate} size={40}/>
                         <span className="flex-1 min-w-0 text-sm text-gray-700 leading-snug line-clamp-2">{q.questionTitle}</span>
+                        {q.lastAnswered && <span className="shrink-0 text-[10px] text-gray-400 tabular-nums">{(() => { try { return new Date(q.lastAnswered).toLocaleDateString("en-US", { month: "short", day: "numeric" }) } catch { return "" } })()}</span>}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${q.errorRate}%`, background: color }}/></div>
@@ -1426,7 +1479,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                     </div>
                   )
                 })}
-                {!diffLoading && diffQuestions !== null && diffQuestions.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data yet — play more sessions first</p>}
+                {!diffLoading && diffQuestions !== null && diffQuestions.length === 0 && <p className="text-sm text-gray-400 text-center py-4">{diffDays > 0 ? `No sessions in the last ${diffDays} days — try a wider period` : "No data yet — play more sessions first"}</p>}
               </div>
             </div>
           </>)}
@@ -2217,7 +2270,14 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <h3 className="text-base font-semibold text-gray-800">Question Bank</h3>
                   <p className="text-sm text-gray-400 mt-1">Most-missed questions — select to build a review quiz</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                    {([[7, "7 days"], [30, "30 days"], [90, "90 days"], [0, "All time"]] as const).map(([d, label], i) => (
+                      <button key={d} onClick={() => setDiffDays(d)}
+                        className={clsx("px-3 py-1 text-xs font-semibold transition-colors", i > 0 ? "border-l border-gray-200" : "",
+                          diffDays === d ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>{label}</button>
+                    ))}
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-gray-400">Min error:</span>
                     {[0, 30, 50, 70].map(n => (
@@ -2269,6 +2329,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                         else setBankSelected(prev => { const n = new Set(prev); filtered_dq.forEach(q => n.add(q.questionTitle)); return n })
                       }} className="w-4 h-4 rounded border-gray-300 accent-primary cursor-pointer" />
                       <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Question</span>
+                      <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">Last seen</span>
                       <span className="w-20 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">Answered</span>
                       <span className="w-16 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">Errors</span>
                       <span className="w-24 text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Error rate</span>
@@ -2286,6 +2347,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                               className={clsx("flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 cursor-pointer transition-colors", sel ? "bg-primary/5" : "hover:bg-gray-50")}>
                               <input type="checkbox" checked={sel} readOnly className="w-4 h-4 rounded border-gray-300 accent-primary pointer-events-none shrink-0" />
                               <span className="flex-1 min-w-0 text-sm text-gray-700 leading-snug">{q.questionTitle}</span>
+                              <span className="w-20 shrink-0 text-center text-xs tabular-nums text-gray-400">{q.lastAnswered ? (() => { try { return new Date(q.lastAnswered).toLocaleDateString("en-US", { month: "short", day: "numeric" }) } catch { return "—" } })() : "—"}</span>
                               <span className="w-20 shrink-0 text-center text-sm tabular-nums text-gray-500">{q.timesAnswered}×</span>
                               <span className="w-16 shrink-0 text-center text-sm tabular-nums text-gray-500">{q.timesWrong}×</span>
                               <div className="w-24 shrink-0 flex items-center justify-end gap-1.5">
