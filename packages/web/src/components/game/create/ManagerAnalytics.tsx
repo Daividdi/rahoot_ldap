@@ -152,12 +152,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [soloLoading, setSoloLoading] = useState(false)
   const [soloExpandedPlayer, setSoloExpandedPlayer] = useState<string | null>(null)
   const [teamExpandedPlayer, setTeamExpandedPlayer] = useState<string | null>(null)
-  const [combinedSort, setCombinedSort] = useState<"name" | "solo_acc" | "team_acc" | "solo_games" | "team_games">("team_acc")
+  type SortDir = "asc" | "desc"
+  const [combinedSort, setCombinedSort] = useState<{ key: "name" | "solo_acc" | "team_acc" | "solo_games" | "team_games"; dir: SortDir }>({ key: "team_acc", dir: "desc" })
   const [combinedSearch, setCombinedSearch] = useState("")
   const [soloSearch, setSoloSearch] = useState("")
-  const [soloSort, setSoloSort] = useState<"acc" | "attempts" | "correct" | "name">("acc")
+  const [soloSort, setSoloSort] = useState<{ key: "acc" | "attempts" | "quizzes" | "correct" | "points" | "name"; dir: SortDir }>({ key: "acc", dir: "desc" })
   const [teamSearch, setTeamSearch] = useState("")
-  const [teamSort, setTeamSort] = useState<"acc" | "games" | "correct" | "name">("acc")
+  const [teamSort, setTeamSort] = useState<{ key: "acc" | "games" | "rank" | "correct" | "points" | "name"; dir: SortDir }>({ key: "acc", dir: "desc" })
 
   type DiffQuestion = { questionTitle: string; quizCount: number; timesAnswered: number; timesCorrect: number; timesWrong: number; errorRate: number }
   const [diffQuestions, setDiffQuestions] = useState<DiffQuestion[] | null>(null)
@@ -733,6 +734,23 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     <div className={clsx("shrink-0 text-xs font-semibold text-gray-400 uppercase tracking-wide select-none", cls)}>{children}</div>
   )
 
+  // Clickable column header — click toggles high→low / low→high
+  const SortableTH = ({ label, k, sort, onSort, cls, defaultDir = "desc" }: {
+    label: string; k: string
+    sort: { key: string; dir: "asc" | "desc" }
+    onSort: (s: any) => void
+    cls?: string; defaultDir?: "asc" | "desc"
+  }) => (
+    <button
+      onClick={() => onSort(sort.key === k ? { key: k, dir: sort.dir === "desc" ? "asc" : "desc" } : { key: k, dir: defaultDir })}
+      title="Click to sort"
+      className={clsx("flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-widest select-none transition-colors", cls,
+        sort.key === k ? "text-primary" : "text-gray-400 hover:text-gray-600")}>
+      <span>{label}</span>
+      <span className="w-2 text-[8px]">{sort.key === k ? (sort.dir === "desc" ? "▼" : "▲") : ""}</span>
+    </button>
+  )
+
   const analyticsNav: { id: NavView; label: string; icon: React.ReactNode }[] = [
     { id: "overview",      label: "Overview",      icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg> },
     { id: "players",       label: "Top Players",   icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="2" y="13" width="5" height="9" rx="1"/><rect x="9.5" y="8" width="5" height="14" rx="1"/><rect x="17" y="11" width="5" height="11" rx="1"/></svg> },
@@ -740,7 +758,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     { id: "participation", label: "Participation", icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
     { id: "activity",      label: "Activity",      icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> },
     { id: "solo",          label: "Solo Games",    icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2-8 3v1h16v-1c0-1-3-3-8-3z"/><path d="M19 3l1.5 1.5L17 8l-1.5-1.5z" strokeWidth="1.4"/></svg> },
-    { id: "team_games",    label: "Team Games",    icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
+    { id: "team_games",    label: "Classic Games", icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
     { id: "combined",      label: "All Players",   icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg> },
     { id: "question_bank", label: "Question Bank", icon: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg> },
   ]
@@ -1504,11 +1522,17 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 const uniquePlayers = psAll.length
                 const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
                 const q2 = soloSearch.trim().toLowerCase()
-                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) =>
-                  soloSort === "name" ? a.real_name.localeCompare(b.real_name)
-                  : soloSort === "attempts" ? b.total_attempts - a.total_attempts
-                  : soloSort === "correct" ? b.total_correct - a.total_correct
-                  : (b.avg_accuracy - a.avg_accuracy) || (b.total_correct - a.total_correct))
+                const dir = soloSort.dir === "asc" ? 1 : -1
+                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
+                  switch (soloSort.key) {
+                    case "name":     return dir * a.real_name.localeCompare(b.real_name)
+                    case "attempts": return dir * (a.total_attempts - b.total_attempts)
+                    case "quizzes":  return dir * (a.quizzes_played - b.quizzes_played)
+                    case "correct":  return dir * (a.total_correct - b.total_correct)
+                    case "points":   return dir * ((a.best_points || 0) - (b.best_points || 0))
+                    default:         return dir * ((a.avg_accuracy - b.avg_accuracy) || (a.total_correct - b.total_correct))
+                  }
+                })
                 return (<>
                   {/* KPI cards */}
                   <div className="grid grid-cols-3 gap-4">
@@ -1569,30 +1593,25 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">By Player</h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          value={soloSearch}
-                          onChange={e => setSoloSearch(e.target.value)}
-                          placeholder="Search players..."
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                        />
-                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                          {([["acc", "Accuracy"], ["attempts", "Attempts"], ["correct", "Correct"], ["name", "Name"]] as const).map(([id, label], si) => (
-                            <button key={id} onClick={() => setSoloSort(id)}
-                              className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", si > 0 ? "border-l border-gray-200" : "",
-                                soloSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      <input
+                        value={soloSearch}
+                        onChange={e => setSoloSearch(e.target.value)}
+                        placeholder="Search players..."
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                      />
                     </div>
                     {ps.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No solo attempts yet"}</p>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}>
-                          <span>Player</span><span className="text-center">Quizzes</span><span className="text-center">Attempts</span><span className="text-center">Correct</span><span>Accuracy</span><span/>
+                        <div className="grid gap-3 px-3 pb-2" style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}>
+                          <SortableTH label="Player" k="name" sort={soloSort} onSort={setSoloSort} defaultDir="asc" />
+                          <SortableTH label="Quizzes" k="quizzes" sort={soloSort} onSort={setSoloSort} cls="justify-center" />
+                          <SortableTH label="Attempts" k="attempts" sort={soloSort} onSort={setSoloSort} cls="justify-center" />
+                          <SortableTH label="Correct" k="correct" sort={soloSort} onSort={setSoloSort} cls="justify-center" />
+                          <SortableTH label="Best pts" k="points" sort={soloSort} onSort={setSoloSort} cls="justify-center" />
+                          <SortableTH label="Accuracy" k="acc" sort={soloSort} onSort={setSoloSort} />
+                          <span/>
                         </div>
                         {ps.map(p => {
                           const acc = Math.round(p.avg_accuracy || 0)
@@ -1602,12 +1621,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           return (
                             <div key={p.real_name} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all">
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
-                                style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}
+                                style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
                                 onClick={() => setSoloExpandedPlayer(isExp ? null : p.real_name)}>
                                 <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.quizzes_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_attempts}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_correct}</span>
+                                <span className="text-sm font-bold text-gray-700 text-center tabular-nums">{p.best_points ?? 0}</span>
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                                     <div className="h-full rounded-full" style={{ width: `${Math.max(acc,2)}%`, background: color }} />
@@ -1659,7 +1679,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   Refresh
                 </button>
               </div>
-              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading team data…</div>}
+              {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading classic data…</div>}
               {soloReport && !soloReport.ok && <div className="rounded-2xl bg-red-50 px-6 py-4 text-sm text-red-600">Failed to load: {(soloReport as any).error}</div>}
               {soloReport && soloReport.ok && (() => {
                 const qs = soloReport.teamQuizStats ?? []
@@ -1669,11 +1689,17 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 const uniquePlayers = psAll.length
                 const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
                 const q2 = teamSearch.trim().toLowerCase()
-                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) =>
-                  teamSort === "name" ? a.real_name.localeCompare(b.real_name)
-                  : teamSort === "games" ? b.games_played - a.games_played
-                  : teamSort === "correct" ? b.total_correct - a.total_correct
-                  : (b.avg_accuracy - a.avg_accuracy) || (b.total_correct - a.total_correct))
+                const dir = teamSort.dir === "asc" ? 1 : -1
+                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
+                  switch (teamSort.key) {
+                    case "name":    return dir * a.real_name.localeCompare(b.real_name)
+                    case "games":   return dir * (a.games_played - b.games_played)
+                    case "rank":    return dir * (a.avg_rank - b.avg_rank)
+                    case "correct": return dir * (a.total_correct - b.total_correct)
+                    case "points":  return dir * ((a.best_points || 0) - (b.best_points || 0))
+                    default:        return dir * ((a.avg_accuracy - b.avg_accuracy) || (a.total_correct - b.total_correct))
+                  }
+                })
                 return (<>
                   {/* KPI cards */}
                   <div className="grid grid-cols-3 gap-4">
@@ -1701,7 +1727,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <h3 className="mb-4 text-base font-semibold text-gray-800">By Quiz</h3>
                     {qs.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-8">No team sessions yet</p>
+                      <p className="text-sm text-gray-400 text-center py-8">No classic sessions yet</p>
                     ) : (
                       <div className="flex flex-col gap-1">
                         <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 80px 80px 120px 100px" }}>
@@ -1734,30 +1760,25 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">By Player</h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          value={teamSearch}
-                          onChange={e => setTeamSearch(e.target.value)}
-                          placeholder="Search players..."
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                        />
-                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                          {([["acc", "Accuracy"], ["games", "Games"], ["correct", "Correct"], ["name", "Name"]] as const).map(([id, label], si) => (
-                            <button key={id} onClick={() => setTeamSort(id)}
-                              className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", si > 0 ? "border-l border-gray-200" : "",
-                                teamSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      <input
+                        value={teamSearch}
+                        onChange={e => setTeamSearch(e.target.value)}
+                        placeholder="Search players..."
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                      />
                     </div>
                     {ps.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No team sessions yet"}</p>
+                      <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No classic sessions yet"}</p>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        <div className="grid gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}>
-                          <span>Player</span><span className="text-center">Games</span><span className="text-center">Best rank</span><span className="text-center">Correct</span><span>Accuracy</span><span/>
+                        <div className="grid gap-3 px-3 pb-2" style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}>
+                          <SortableTH label="Player" k="name" sort={teamSort} onSort={setTeamSort} defaultDir="asc" />
+                          <SortableTH label="Games" k="games" sort={teamSort} onSort={setTeamSort} cls="justify-center" />
+                          <SortableTH label="Avg rank" k="rank" sort={teamSort} onSort={setTeamSort} cls="justify-center" defaultDir="asc" />
+                          <SortableTH label="Correct" k="correct" sort={teamSort} onSort={setTeamSort} cls="justify-center" />
+                          <SortableTH label="Best pts" k="points" sort={teamSort} onSort={setTeamSort} cls="justify-center" />
+                          <SortableTH label="Accuracy" k="acc" sort={teamSort} onSort={setTeamSort} />
+                          <span/>
                         </div>
                         {ps.map(p => {
                           const acc = Math.round(p.avg_accuracy || 0)
@@ -1767,12 +1788,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           return (
                             <div key={p.real_name} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all">
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
-                                style={{ gridTemplateColumns: "1fr 60px 70px 60px 110px 24px" }}
+                                style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
                                 onClick={() => setTeamExpandedPlayer(isExp ? null : p.real_name)}>
                                 <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.games_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">#{Math.round(p.avg_rank)}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_correct}</span>
+                                <span className="text-sm font-bold text-gray-700 text-center tabular-nums">{p.best_points ?? 0}</span>
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                                     <div className="h-full rounded-full" style={{ width: `${Math.max(acc,2)}%`, background: color }} />
@@ -1820,55 +1842,40 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 const cq = combinedSearch.trim().toLowerCase()
                 const rows = cq ? combinedRows.filter(r => r.name.toLowerCase().includes(cq)) : combinedRows
 
+                const cDir = combinedSort.dir === "asc" ? 1 : -1
                 const sorted = [...rows].sort((a, b) => {
-                  if (combinedSort === "name") return a.name.localeCompare(b.name)
-                  if (combinedSort === "solo_acc") return b.solo_acc - a.solo_acc
-                  if (combinedSort === "team_acc") return b.team_acc - a.team_acc
-                  if (combinedSort === "solo_games") return b.solo_games - a.solo_games
-                  if (combinedSort === "team_games") return b.team_games - a.team_games
-                  return 0
+                  switch (combinedSort.key) {
+                    case "name":       return cDir * a.name.localeCompare(b.name)
+                    case "solo_acc":   return cDir * (a.solo_acc - b.solo_acc)
+                    case "solo_games": return cDir * (a.solo_games - b.solo_games)
+                    case "team_games": return cDir * (a.team_games - b.team_games)
+                    default:           return cDir * (a.team_acc - b.team_acc)
+                  }
                 })
-
-                const SortBtn = ({ id, label }: { id: typeof combinedSort; label: string }) => (
-                  <button onClick={() => setCombinedSort(id)}
-                    className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors",
-                      combinedSort === id ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
-                    {label}
-                  </button>
-                )
 
                 return (
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-                      <h3 className="text-base font-semibold text-gray-800">All Players — Team &amp; Solo</h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input
-                          value={combinedSearch}
-                          onChange={e => setCombinedSearch(e.target.value)}
-                          placeholder="Search players..."
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                        />
-                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                          <SortBtn id="team_acc" label="Team acc" />
-                          <SortBtn id="solo_acc" label="Solo acc" />
-                          <SortBtn id="team_games" label="Team games" />
-                          <SortBtn id="solo_games" label="Solo attempts" />
-                          <SortBtn id="name" label="Name" />
-                        </div>
-                      </div>
+                      <h3 className="text-base font-semibold text-gray-800">All Players — Classic &amp; Solo</h3>
+                      <input
+                        value={combinedSearch}
+                        onChange={e => setCombinedSearch(e.target.value)}
+                        placeholder="Search players..."
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                      />
                     </div>
 
                     {sorted.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">No data yet</p>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        <div className="grid gap-2 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400"
+                        <div className="grid gap-2 px-3 pb-2"
                           style={{ gridTemplateColumns: "1fr repeat(2, 130px) repeat(2, 80px)" }}>
-                          <span>Player</span>
-                          <span>Team accuracy</span>
-                          <span>Solo accuracy</span>
-                          <span className="text-center">Team</span>
-                          <span className="text-center">Solo</span>
+                          <SortableTH label="Player" k="name" sort={combinedSort} onSort={setCombinedSort} defaultDir="asc" />
+                          <SortableTH label="Classic accuracy" k="team_acc" sort={combinedSort} onSort={setCombinedSort} />
+                          <SortableTH label="Solo accuracy" k="solo_acc" sort={combinedSort} onSort={setCombinedSort} />
+                          <SortableTH label="Classic games" k="team_games" sort={combinedSort} onSort={setCombinedSort} cls="justify-center" />
+                          <SortableTH label="Solo" k="solo_games" sort={combinedSort} onSort={setCombinedSort} cls="justify-center" />
                         </div>
                         {sorted.map(r => {
                           const ta = Math.round(r.team_acc), sa = Math.round(r.solo_acc)
