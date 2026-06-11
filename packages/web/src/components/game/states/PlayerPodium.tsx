@@ -4,9 +4,16 @@ import { CommonStatusDataMap } from "@rahoot/common/types/game/status"
 import useScreenSize from "@rahoot/web/hooks/useScreenSize"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import { usePlayerStore } from "@rahoot/web/stores/player"
+import {
+  SFX_PODIUM_FIRST,
+  SFX_PODIUM_SECOND,
+  SFX_PODIUM_THREE,
+  SFX_SNEAR_ROOL,
+} from "@rahoot/web/utils/constants"
 import clsx from "clsx"
 import { useEffect, useState, useRef } from "react"
 import ReactConfetti from "react-confetti"
+import useSound from "use-sound"
 import { motion, AnimatePresence } from "motion/react"
 // Inline icon components — no lucide-react dependency needed
 const IconTrophy = ({ className }: { className?: string }) => (
@@ -37,14 +44,18 @@ const IconMinus = ({ className }: { className?: string }) => (
 
 type Props = { data: CommonStatusDataMap["FINISHED"] }
 
+// Cheering emojis (Noto-style PNGs) followed by round country flags (SVG).
+// `flag: true` keeps the flag art inside a circle in both button and particle.
 const REACTIONS = [
-  { id: "heart", url: "/emojis/heart.png", label: "Love",     bg: "bg-red-500/80",    activeBg: "bg-red-500"    },
-  { id: "clap",  url: "/emojis/clap.png",  label: "Applause", bg: "bg-amber-500/80",  activeBg: "bg-amber-500"  },
-  { id: "laugh", url: "/emojis/laugh.png", label: "Laugh",    bg: "bg-yellow-400/80", activeBg: "bg-yellow-400" },
-  { id: "wow",   url: "/emojis/wow.png",   label: "Wow",      bg: "bg-blue-500/80",   activeBg: "bg-blue-500"   },
-  { id: "br",    url: "/emojis/flag-br.png", label: "Brazil",   bg: "bg-green-700/80",  activeBg: "bg-green-700"  },
-  { id: "my",    url: "/emojis/flag-my.png", label: "Malaysia", bg: "bg-red-700/80",    activeBg: "bg-red-700"    },
-  { id: "cn",    url: "/emojis/flag-cn.png", label: "China",    bg: "bg-red-800/80",    activeBg: "bg-red-800"    },
+  { id: "heart", url: "/emojis/heart.png", label: "Love",     flag: false },
+  { id: "clap",  url: "/emojis/clap.png",  label: "Applause", flag: false },
+  { id: "laugh", url: "/emojis/laugh.png", label: "Laugh",    flag: false },
+  { id: "wow",   url: "/emojis/wow.png",   label: "Wow",      flag: false },
+  { id: "party", url: "/emojis/party.png", label: "Party",    flag: false },
+  { id: "fire",  url: "/emojis/fire.png",  label: "Fire",     flag: false },
+  { id: "br", url: "/emojis/flag-br-round.svg", label: "Brazil",   flag: true },
+  { id: "my", url: "/emojis/flag-my-round.svg", label: "Malaysia", flag: true },
+  { id: "cn", url: "/emojis/flag-cn-round.svg", label: "China",    flag: true },
 ]
 
 type Particle = { id: number; url: string; x: number; size: number; drift: number }
@@ -53,13 +64,13 @@ type FullResults = { quizId: string; quizTitle: string; players: any[] }
 // Apparition timing mirrors Podium.tsx (manager side) so both screens are in sync.
 // delays[apparition] = ms to wait before advancing to next stage.
 // Stage meanings:
-//   0 → 1  : 3 s  — 3rd place rises
-//   1 → 2  : 4 s  — 2nd place rises
-//   2 → 3  : 2.5s — spotlight flares, drum roll starts
-//   3 → 4  : 4 s  — 1st place rises + fanfare
-//   4 → 5  : 3 s  — confetti + bounce
+//   0 → 1  : 3 s — 3rd place rises
+//   1 → 2  : 4 s — 2nd place rises
+//   2 → 3  : 3 s — spotlight flares, drum roll starts
+//   3 → 4  : 7 s — drum roll, then 1st place rises + fanfare
+//   4 → 5  : 4 s — confetti + bounce
 //   5+     : done
-const APPARITION_DELAYS = [3000, 4000, 2500, 4000, 3000, 99999]
+const APPARITION_DELAYS = [3000, 4000, 3000, 7000, 4000, 99999]
 
 const PodiumAvatar = ({ player, size, delay = 0 }: { player: any; size: number; delay?: number }) => (
   <motion.div
@@ -351,6 +362,21 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
   const MAX_PARTICLES   = 14
   const THROTTLE_MS     = 280
 
+  // ── Podium sounds — same cues as the manager's Podium.tsx ────────────────────
+  const [sfxThree]  = useSound(SFX_PODIUM_THREE,  { volume: 0.2 })
+  const [sfxSecond] = useSound(SFX_PODIUM_SECOND, { volume: 0.2 })
+  const [sfxRoll, { stop: sfxRollStop }] = useSound(SFX_SNEAR_ROOL, { volume: 0.2 })
+  const [sfxFirst]  = useSound(SFX_PODIUM_FIRST,  { volume: 0.2 })
+
+  useEffect(() => {
+    switch (apparition) {
+      case 4: sfxRollStop(); sfxFirst(); break
+      case 3: sfxRoll(); break
+      case 2: sfxSecond(); break
+      case 1: sfxThree(); break
+    }
+  }, [apparition, sfxFirst, sfxSecond, sfxThree, sfxRoll, sfxRollStop])
+
   // ── Apparition sequence (same logic as manager's Podium.tsx) ─────────────────
   useEffect(() => {
     if (animationDone.current) return
@@ -370,11 +396,12 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
     return () => clearTimeout(t)
   }, [apparition, top.length])
 
-  // Show "Ver Resultados" button once 3rd place has risen (apparition >= 1 + some buffer)
+  // Show "View Results" only after the podium reveal finished (1st place up + confetti)
   useEffect(() => {
-    const t = setTimeout(() => setShowResultsBtn(true), 5000)
+    if (apparition < 5) return
+    const t = setTimeout(() => setShowResultsBtn(true), 800)
     return () => clearTimeout(t)
-  }, [])
+  }, [apparition])
 
   // Show feedback form immediately so players see it before leaving
   useEffect(() => {
@@ -546,22 +573,28 @@ const PlayerPodium = ({ data: { subject, top } }: Props) => {
 
       {/* Reaction buttons — bottom center */}
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex justify-center pb-4 pt-2 bg-gradient-to-t from-black/40 to-transparent pointer-events-none">
-        <motion.div initial={{ opacity: 0, y: 30, scale: 0.85 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 2, type: "spring", stiffness: 260, damping: 22 }}
-          className="pointer-events-auto flex flex-wrap justify-center gap-2 rounded-2xl bg-black/60 backdrop-blur-md px-4 py-3 shadow-2xl border border-white/10 max-w-xs sm:max-w-none">
-          {REACTIONS.map(r => (
-            <motion.button key={r.id} whileHover={{ scale: 1.18 }} whileTap={{ scale: 0.84 }}
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.8, type: "spring", stiffness: 260, damping: 22 }}
+          className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 rounded-[32px] bg-black/55 px-2.5 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.35),0_2px_8px_rgba(0,0,0,0.25)] backdrop-blur-md max-w-[19rem] sm:max-w-none">
+          {REACTIONS.map((r, i) => (
+            <motion.button key={r.id}
+              initial={{ opacity: 0, y: 14, scale: 0.25 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 2 + i * 0.06, type: "spring", stiffness: 320, damping: 20 }}
+              whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.96 }}
               onClick={() => fireReaction(r)}
-              className={clsx("flex flex-col items-center gap-1 rounded-xl px-3 py-2 shadow-lg active:brightness-125", r.bg)}>
-              {r.url.startsWith("/") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.url} alt={r.label} className="h-11 w-11 drop-shadow-lg" />
-              ) : (
-                <span className="text-4xl leading-none select-none drop-shadow-lg">{r.url}</span>
-              )}
-              <span className="text-[9px] font-bold text-white/90 tracking-wide">{r.label}</span>
+              title={r.label} aria-label={r.label}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={r.url} alt="" draggable={false}
+                className={clsx("h-8 w-8 select-none", r.flag ? "rounded-full shadow-md" : "drop-shadow-lg")} />
             </motion.button>
-          ))}
+          )).flatMap((btn, i) =>
+            // Thin divider between the emoji group and the country flags
+            REACTIONS[i].id === "br"
+              ? [<div key="divider" className="mx-1 h-7 w-px self-center bg-white/15" />, btn]
+              : [btn]
+          )}
         </motion.div>
       </div>
 
