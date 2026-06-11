@@ -22,6 +22,44 @@ const isExcluded = (name: string) => {
   return EXCLUDED_PLAYERS.some(ex => lower === ex || lower.includes(ex))
 }
 
+const downloadCsv = (filename: string, rows: Record<string, any>[]) => {
+  if (!rows.length) return
+  const headers = Object.keys(rows[0])
+  const esc = (v: any) => { const s = String(v ?? ""); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  const csv = [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n")
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" })
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// Small accuracy-over-time line for expanded player rows
+const TrendSparkline = ({ rows, label }: { rows?: any[]; label: string }) => {
+  if (!rows) return <div className="flex h-10 items-center text-xs text-gray-300">Loading trend…</div>
+  if (rows.length < 2) return <div className="flex h-10 items-center text-xs text-gray-300">Not enough sessions for a trend</div>
+  const pts = rows.map(r => (r.total > 0 ? (100 * r.correct) / r.total : 0))
+  const W = 220, H = 40, P = 4
+  const xy = pts.map((v, i) => [P + (i * (W - 2 * P)) / (pts.length - 1), H - P - (v / 100) * (H - 2 * P)])
+  const dPath = xy.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ")
+  const last = Math.round(pts[pts.length - 1])
+  const delta = last - Math.round(pts[0])
+  return (
+    <div className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 px-3 py-2">
+      <svg width={W} height={H} className="shrink-0">
+        <path d={dPath} fill="none" stroke="#009edf" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={xy[xy.length - 1][0]} cy={xy[xy.length - 1][1]} r="3" fill="#009edf" />
+      </svg>
+      <div className="text-xs text-gray-500">
+        <span className="font-bold text-gray-700">{last}%</span> latest
+        <span className={clsx("ml-2 font-bold", delta >= 0 ? "text-green-600" : "text-red-500")}>{delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}pp</span>
+        <span className="ml-1">vs first · {rows.length} {label}</span>
+      </div>
+    </div>
+  )
+}
+
 const GROUP_COLORS: Record<string, { bg: string; text: string; bar: string; border: string }> = {
   ATP:    { bg: "bg-purple-50",  text: "text-purple-700", bar: "bg-purple-500",  border: "#7c3aed" },
   ATD:    { bg: "bg-orange-50",  text: "text-orange-700", bar: "bg-orange-500",  border: "#ea580c" },
@@ -155,6 +193,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   type SortDir = "asc" | "desc"
   const [combinedSort, setCombinedSort] = useState<{ key: "name" | "solo_acc" | "team_acc" | "solo_games" | "team_games"; dir: SortDir }>({ key: "team_acc", dir: "desc" })
   const [combinedSearch, setCombinedSearch] = useState("")
+  const [combinedMinGames, setCombinedMinGames] = useState(true)
   const [soloSearch, setSoloSearch] = useState("")
   const [soloSort, setSoloSort] = useState<{ key: "acc" | "attempts" | "quizzes" | "correct" | "points" | "name"; dir: SortDir }>({ key: "acc", dir: "desc" })
   const [teamSearch, setTeamSearch] = useState("")
@@ -292,6 +331,66 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     })
   }, [socket, periodRange])
 
+  // Real daily aggregates for the Overview KPIs and trend chart
+  const [trend, setTrend] = useState<{ days: any[]; summary: any } | null>(null)
+  useEffect(() => {
+    if (!socket) return
+    ;(socket as any).timeout(15000).emit("manager:getActivityTrend", { from: periodRange.from, to: periodRange.to }, (err: any, res: any) => {
+      if (!err && res?.ok) setTrend({ days: res.days, summary: res.summary })
+    })
+  }, [socket, periodRange])
+
+  // Weekly engagement (active players + retention)
+  const [engagement, setEngagement] = useState<any[] | null>(null)
+  useEffect(() => {
+    if (!socket) return
+    ;(socket as any).timeout(15000).emit("manager:getEngagement", (err: any, res: any) => {
+      if (!err && res?.ok) setEngagement(res.weeks)
+    })
+  }, [socket])
+
+  // LDAP-known players with no activity in the selected period
+  const [nonParticipants, setNonParticipants] = useState<any[] | null>(null)
+  useEffect(() => {
+    if (!socket) return
+    ;(socket as any).timeout(20000).emit("manager:getNonParticipants", { from: periodRange.from, to: periodRange.to }, (err: any, res: any) => {
+      if (!err && res?.ok) setNonParticipants(res.rows)
+    })
+  }, [socket, periodRange])
+
+  // Per-player accuracy evolution, fetched on demand when a row is expanded
+  const [playerTrends, setPlayerTrends] = useState<Record<string, any>>({})
+  const fetchPlayerTrend = (name: string) => {
+    if (!socket || playerTrends[name]) return
+    ;(socket as any).timeout(15000).emit("manager:getPlayerTrend", { name }, (err: any, res: any) => {
+      if (!err && res?.ok) setPlayerTrends(prev => ({ ...prev, [name]: res }))
+    })
+  }
+
+  // Filters live in the URL so refresh/share keeps the same view
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const v = sp.get("view"); if (v) setActiveView(v as NavView)
+      const p = sp.get("period"); if (p === "month" || p === "week") setPFilter(p)
+      const o = Number(sp.get("offset")); if (!Number.isNaN(o) && o) setPOffset(o)
+      const r = sp.get("region"); if (r === "BR" || r === "MY" || r === "CN") setRFilter(r)
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const setOrDel = (k: string, val: string | null) => { if (val) sp.set(k, val); else sp.delete(k) }
+      setOrDel("view", activeView !== "overview" ? activeView : null)
+      setOrDel("period", pFilter !== "all" ? pFilter : null)
+      setOrDel("offset", pOffset !== 0 ? String(pOffset) : null)
+      setOrDel("region", rFilter !== "all" ? rFilter : null)
+      const qs = sp.toString()
+      window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
+    } catch {}
+  }, [activeView, pFilter, pOffset, rFilter])
+
   const data = useMemo(() => {
     try {
       return (localList || []).map(q => {
@@ -356,6 +455,19 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       }
     } catch { return { total: 0, questions: 0, sessions: 0, players: 0, unique: 0, creators: 0, acc: 0, totalCorrect: 0, totalAnswers: 0, avgP: 0, avgD: 0 } }
   }, [filtered])
+
+  // Overview KPIs from real session data (every session counts, accuracy
+  // weighted by answers). Falls back to quiz-level metrics while loading.
+  const kpi = useMemo(() => {
+    const sm = trend?.summary
+    return {
+      sessions: sm?.sessions ?? metrics.sessions,
+      participations: sm?.participations ?? metrics.players,
+      unique: sm?.unique_players ?? metrics.unique,
+      acc: sm && sm.total > 0 ? Math.round((100 * sm.correct) / sm.total) : metrics.acc,
+      avgP: sm && sm.sessions > 0 ? Math.round((sm.participations / sm.sessions) * 10) / 10 : metrics.avgP,
+    }
+  }, [trend, metrics])
 
   const playerTiers = useMemo(() => {
     try {
@@ -925,9 +1037,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             {/* KPI cards */}
             <div className="grid grid-cols-4 gap-4">
               {[
-                { label: "Total Quizzes", val: metrics.total, sub1: `${metrics.questions} questions`, sub2: `${metrics.sessions} sessions played`, color: "bg-primary", iconColor: "#009edf", icon: <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6M9 16h4"/> },
-                { label: "Participations", val: metrics.players.toLocaleString(), sub1: `${metrics.unique} unique players`, sub2: `${metrics.creators} content creators`, color: "bg-green-500", iconColor: "#22c55e", icon: <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></> },
-                { label: "Avg / Session", val: metrics.avgP, sub1: "players per session", sub2: `${metrics.avgD} min avg duration`, color: "bg-amber-400", iconColor: "#f59e0b", icon: <path d="M18 20V10M12 20V4M6 20v-6"/> },
+                { label: "Total Quizzes", val: metrics.total, sub1: `${metrics.questions} questions`, sub2: `${kpi.sessions} sessions played`, color: "bg-primary", iconColor: "#009edf", icon: <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6M9 16h4"/> },
+                { label: "Participations", val: kpi.participations.toLocaleString(), sub1: `${kpi.unique} unique players`, sub2: `${metrics.creators} content creators`, color: "bg-green-500", iconColor: "#22c55e", icon: <><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></> },
+                { label: "Avg / Session", val: kpi.avgP, sub1: "players per session", sub2: `${metrics.avgD} min avg duration`, color: "bg-amber-400", iconColor: "#f59e0b", icon: <path d="M18 20V10M12 20V4M6 20v-6"/> },
               ].map((c, ci) => (
                 <div key={ci} className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 overflow-hidden relative">
                   <div className={clsx("absolute inset-y-0 left-0 w-1 rounded-l-2xl", c.color)} />
@@ -957,10 +1069,10 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 leading-tight">Overall Accuracy</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <AccRing v={metrics.acc} size={60} />
+                    <AccRing v={kpi.acc} size={60} />
                     <div>
-                      <div className="text-base font-semibold text-gray-700 leading-tight">{metrics.acc >= 65 ? "Good" : metrics.acc >= 50 ? "Getting there" : "Needs work"}</div>
-                      <div className="text-sm text-gray-400 mt-1">across all sessions</div>
+                      <div className="text-base font-semibold text-gray-700 leading-tight">{kpi.acc >= 65 ? "Good" : kpi.acc >= 50 ? "Getting there" : "Needs work"}</div>
+                      <div className="text-sm text-gray-400 mt-1">weighted across all answers</div>
                     </div>
                   </div>
                 </div>
@@ -971,17 +1083,41 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
             {(() => {
               // Determine data source and x-labels based on active filter
               type Bar = { label: string; players: number; quizzes: number; correct: number; wrong: number; total: number; acc: number }
+              // Built from real per-day session aggregates (every session counts)
+              const td: any[] = trend?.days ?? []
+              const mkBar = (label: string, rows: any[]): Bar => {
+                const correct = rows.reduce((a, r) => a + (r.correct || 0), 0)
+                const total = rows.reduce((a, r) => a + (r.total || 0), 0)
+                return {
+                  label,
+                  players: rows.reduce((a, r) => a + (r.players || 0), 0),
+                  quizzes: rows.reduce((a, r) => a + (r.sessions || 0), 0),
+                  correct, wrong: total - correct, total,
+                  acc: total > 0 ? Math.round((correct / total) * 100) : 0,
+                }
+              }
+              const fmtDay = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`
               let bars: Bar[] = []
               let subtitle = ""
               if (pFilter === "week") {
-                bars = weeklyDays.map(d => ({ label: d.day, players: d.players, quizzes: d.quizzes, correct: d.correct, wrong: d.wrong, total: d.total, acc: d.acc }))
+                const start = periodRange.from ? new Date(periodRange.from) : new Date()
+                bars = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((nm, i) => {
+                  const dt = new Date(start); dt.setDate(dt.getDate() + i)
+                  const key = fmtDay(dt)
+                  return mkBar(nm, td.filter(r => r.day === key))
+                })
                 subtitle = `Activity by weekday · ${pLabel}`
               } else if (pFilter === "month") {
-                bars = weeklyInMonth.map(w => ({ label: w.label, players: w.players, quizzes: w.quizzes, correct: w.correct, wrong: w.wrong, total: w.total, acc: w.acc }))
+                bars = [1, 2, 3, 4, 5].map(w => mkBar(`Wk ${w}`, td.filter(r => {
+                  const dayOfMonth = Number((r.day || "").slice(8, 10))
+                  return Math.floor((dayOfMonth - 1) / 7) + 1 === w
+                }))).filter((b, i) => i < 4 || b.total > 0)
                 subtitle = `Weekly breakdown · ${pLabel}`
               } else {
-                bars = monthly
-                subtitle = `Monthly activity · ${monthly.length} month${monthly.length !== 1 ? "s" : ""}`
+                const mn = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                const months = [...new Set(td.map(r => (r.day || "").slice(0, 7)))].sort()
+                bars = months.map(m => mkBar(`${mn[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`, td.filter(r => (r.day || "").startsWith(m))))
+                subtitle = `Monthly activity · ${bars.length} month${bars.length !== 1 ? "s" : ""}`
               }
               const hasAny = bars.some(b => b.total > 0)
               const maxTotal = Math.max(...bars.map(b => b.total), 1)
@@ -1063,6 +1199,34 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                       })()}
                     </svg>
                   )}
+                </div>
+              )
+            })()}
+
+            {/* Weekly engagement — active players + retention */}
+            {engagement && engagement.length > 1 && (() => {
+              const maxActive = Math.max(...engagement.map((w: any) => w.active), 1)
+              return (
+                <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold text-gray-800">Weekly Engagement</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Active players per week · retention = % of previous week&apos;s players who came back</p>
+                  </div>
+                  <div className="flex items-end gap-2" style={{ height: 140 }}>
+                    {engagement.map((w: any) => {
+                      const h = Math.max(Math.round((w.active / maxActive) * 100), 4)
+                      const ret = w.retention
+                      const retColor = ret == null ? "text-gray-300" : ret >= 70 ? "text-green-600" : ret >= 40 ? "text-amber-500" : "text-red-500"
+                      return (
+                        <div key={w.week} className="flex flex-1 flex-col items-center justify-end gap-1 min-w-0" title={`${w.week}: ${w.active} active${ret != null ? ` · ${ret}% retention` : ""}`}>
+                          <span className="text-[10px] font-bold tabular-nums text-gray-600">{w.active}</span>
+                          <div className="w-full max-w-[34px] rounded-t-md bg-primary/70 hover:bg-primary transition-colors" style={{ height: `${h}%` }} />
+                          <span className={clsx("text-[9px] font-bold tabular-nums", retColor)}>{ret != null ? `${ret}%` : "—"}</span>
+                          <span className="text-[9px] text-gray-400 truncate">W{(w.week || "").split("-W")[1] || w.week}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )
             })()}
@@ -1428,7 +1592,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
           )}
 
           {/* ── PARTICIPATION BY DAY ──────────────────────────────────────── */}
-          {activeView === "participation" && (
+          {activeView === "participation" && (<div className="flex flex-col gap-5">
             <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 pt-4 pb-3 border-b border-gray-100">
                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1497,7 +1661,47 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 </div>
               )}
             </div>
-          )}
+
+            {/* Non-participants — LDAP-known players with no games in the period */}
+            <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-800">Didn&apos;t play — {pLabel}</h3>
+                  <p className="text-sm text-gray-400 mt-1">Known players with no classic or solo activity in the selected period</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {nonParticipants && (
+                    <span className="rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-500">{nonParticipants.length} player{nonParticipants.length !== 1 ? "s" : ""}</span>
+                  )}
+                  <button
+                    onClick={() => nonParticipants && downloadCsv("non-participants.csv", nonParticipants.map((r: any) => ({ player: r.real_name, last_classic: r.last_classic || "never", last_solo: r.last_solo || "never" })))}
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+              <div className="p-6">
+                {!nonParticipants ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Loading…</p>
+                ) : nonParticipants.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">Everyone played in this period 🎉</p>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2" style={{ maxHeight: 320, overflowY: "auto" }}>
+                    {nonParticipants.map((r: any) => {
+                      const last = r.last_classic || r.last_solo
+                      const ago = last ? (() => { try { const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000); return days === 0 ? "today" : `${days}d ago` } catch { return "" } })() : null
+                      return (
+                        <div key={r.real_name} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                          <span className="truncate text-[13px] font-medium text-gray-700">{r.real_name}</span>
+                          <span className={clsx("shrink-0 text-[10px] font-semibold", ago ? "text-gray-400" : "text-red-400")}>{ago ? `last ${ago}` : "never played"}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>)}
 
 
           {/* ── SOLO GAMES ────────────────────────────────────────────────── */}
@@ -1593,12 +1797,19 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">By Player</h3>
-                      <input
-                        value={soloSearch}
-                        onChange={e => setSoloSearch(e.target.value)}
-                        placeholder="Search players..."
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={soloSearch}
+                          onChange={e => setSoloSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <button
+                          onClick={() => downloadCsv("solo-players.csv", ps.map(p => ({ player: p.real_name, quizzes: p.quizzes_played, attempts: p.total_attempts, correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
+                          Export CSV
+                        </button>
+                      </div>
                     </div>
                     {ps.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No solo attempts yet"}</p>
@@ -1622,7 +1833,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                             <div key={p.real_name} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all">
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
                                 style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
-                                onClick={() => setSoloExpandedPlayer(isExp ? null : p.real_name)}>
+                                onClick={() => { setSoloExpandedPlayer(isExp ? null : p.real_name); if (!isExp) fetchPlayerTrend(p.real_name) }}>
                                 <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.quizzes_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_attempts}</span>
@@ -1638,7 +1849,8 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                               </div>
                               {isExp && pDetail.length > 0 && (
                                 <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 flex flex-col gap-1.5">
-                                  <div className="grid gap-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 60px 90px" }}>
+                                  <TrendSparkline rows={playerTrends[p.real_name]?.solo} label="attempts" />
+                                  <div className="grid gap-3 pb-1.5 pt-1 text-[9px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 60px 90px" }}>
                                     <span>Quiz</span><span className="text-center">Tries</span><span className="text-center">Best score</span><span>Best accuracy</span>
                                   </div>
                                   {pDetail.map(d => {
@@ -1760,12 +1972,19 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">By Player</h3>
-                      <input
-                        value={teamSearch}
-                        onChange={e => setTeamSearch(e.target.value)}
-                        placeholder="Search players..."
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={teamSearch}
+                          onChange={e => setTeamSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <button
+                          onClick={() => downloadCsv("classic-players.csv", ps.map(p => ({ player: p.real_name, games: p.games_played, avg_rank: Math.round(p.avg_rank || 0), correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
+                          Export CSV
+                        </button>
+                      </div>
                     </div>
                     {ps.length === 0 ? (
                       <p className="text-sm text-gray-400 text-center py-8">{q2 ? "No players match your search" : "No classic sessions yet"}</p>
@@ -1789,7 +2008,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                             <div key={p.real_name} className="rounded-xl overflow-hidden border border-transparent hover:border-gray-200 transition-all">
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
                                 style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
-                                onClick={() => setTeamExpandedPlayer(isExp ? null : p.real_name)}>
+                                onClick={() => { setTeamExpandedPlayer(isExp ? null : p.real_name); if (!isExp) fetchPlayerTrend(p.real_name) }}>
                                 <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.games_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">#{Math.round(p.avg_rank)}</span>
@@ -1805,7 +2024,8 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                               </div>
                               {isExp && pDetail.length > 0 && (
                                 <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 flex flex-col gap-1.5">
-                                  <div className="grid gap-3 pb-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 60px 60px 90px" }}>
+                                  <TrendSparkline rows={playerTrends[p.real_name]?.classic} label="sessions" />
+                                  <div className="grid gap-3 pb-1.5 pt-1 text-[9px] font-bold uppercase tracking-widest text-gray-400" style={{ gridTemplateColumns: "1fr 60px 60px 60px 90px" }}>
                                     <span>Quiz</span><span className="text-center">Sessions</span><span className="text-center">Best rank</span><span className="text-center">Correct</span><span>Accuracy</span>
                                   </div>
                                   {pDetail.map(d => {
@@ -1840,7 +2060,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               {soloLoading && <div className="text-center py-12 text-sm text-gray-400">Loading…</div>}
               {!soloLoading && (() => {
                 const cq = combinedSearch.trim().toLowerCase()
-                const rows = cq ? combinedRows.filter(r => r.name.toLowerCase().includes(cq)) : combinedRows
+                const rows = combinedRows
+                  .filter(r => !cq || r.name.toLowerCase().includes(cq))
+                  .filter(r => !combinedMinGames || (r.team_games + r.solo_games) >= 3)
 
                 const cDir = combinedSort.dir === "asc" ? 1 : -1
                 const sorted = [...rows].sort((a, b) => {
@@ -1857,12 +2079,25 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                     <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
                       <h3 className="text-base font-semibold text-gray-800">All Players — Classic &amp; Solo</h3>
-                      <input
-                        value={combinedSearch}
-                        onChange={e => setCombinedSearch(e.target.value)}
-                        placeholder="Search players..."
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          value={combinedSearch}
+                          onChange={e => setCombinedSearch(e.target.value)}
+                          placeholder="Search players..."
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
+                        />
+                        <label className={clsx("flex cursor-pointer select-none items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                          combinedMinGames ? "border-primary/40 bg-primary/5 text-primary" : "border-gray-200 bg-white text-gray-500 hover:text-gray-700")}
+                          title="Hide players with fewer than 3 games — single-game 100% scores distort accuracy rankings">
+                          <input type="checkbox" checked={combinedMinGames} onChange={e => setCombinedMinGames(e.target.checked)} className="h-3 w-3 accent-primary" />
+                          ≥ 3 games
+                        </label>
+                        <button
+                          onClick={() => downloadCsv("all-players.csv", sorted.map(r => ({ player: r.name, classic_games: r.team_games, classic_accuracy_pct: Math.round(r.team_acc), solo_attempts: r.solo_games, solo_accuracy_pct: Math.round(r.solo_acc) })))}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
+                          Export CSV
+                        </button>
+                      </div>
                     </div>
 
                     {sorted.length === 0 ? (

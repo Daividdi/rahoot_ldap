@@ -384,6 +384,145 @@ io.on("connection", (socket) => {
     }
   })
 
+  // ── Daily activity aggregates + range summary (Overview KPIs/trend) ──────
+  socket.on("manager:getActivityTrend", (args: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const from = typeof args?.from === "string" ? args.from : null
+      const to   = typeof args?.to   === "string" ? args.to   : null
+      let range = ""; const rp: string[] = []
+      if (from) { range += " AND s.ended_at >= ?"; rp.push(from) }
+      if (to)   { range += " AND s.ended_at < ?";  rp.push(to) }
+      const d = db()
+      const days = d.prepare(`
+        SELECT date(s.ended_at, 'localtime') AS day,
+          COUNT(DISTINCT s.id) AS sessions,
+          COUNT(sp.id) AS participations,
+          COUNT(DISTINCT sp.player_id) AS players,
+          SUM(sp.correct) AS correct,
+          SUM(sp.correct + sp.incorrect + sp.unanswered) AS total
+        FROM sessions s
+        JOIN session_players sp ON sp.session_id = s.id
+        WHERE s.mode = 'classic'${range}
+        GROUP BY day
+        ORDER BY day
+      `).all(...rp)
+      const summary = d.prepare(`
+        SELECT COUNT(DISTINCT s.id) AS sessions,
+          COUNT(sp.id) AS participations,
+          COUNT(DISTINCT sp.player_id) AS unique_players,
+          SUM(sp.correct) AS correct,
+          SUM(sp.correct + sp.incorrect + sp.unanswered) AS total
+        FROM sessions s
+        JOIN session_players sp ON sp.session_id = s.id
+        WHERE s.mode = 'classic'${range}
+      `).get(...rp)
+      callback({ ok: true, days, summary })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── Weekly engagement — active players per ISO week + retention ──────────
+  socket.on("manager:getEngagement", (callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const pairs = db().prepare(`
+        SELECT DISTINCT s.week_iso AS week, sp.player_id AS pid
+        FROM sessions s
+        JOIN session_players sp ON sp.session_id = s.id
+        WHERE s.mode = 'classic'
+      `).all() as any[]
+      const byWeek = new Map<string, Set<string>>()
+      for (const r of pairs) {
+        if (!byWeek.has(r.week)) byWeek.set(r.week, new Set())
+        byWeek.get(r.week)!.add(r.pid)
+      }
+      const weeks = [...byWeek.keys()].sort()
+      const result = weeks.map((w, i) => {
+        const cur = byWeek.get(w)!
+        const prev = i > 0 ? byWeek.get(weeks[i - 1])! : null
+        let retained = 0
+        if (prev) for (const p of cur) if (prev.has(p)) retained++
+        return { week: w, active: cur.size, retention: prev && prev.size > 0 ? Math.round((retained / prev.size) * 100) : null }
+      })
+      callback({ ok: true, weeks: result.slice(-12) })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── Per-player accuracy/points evolution (recent sessions, both modes) ───
+  socket.on("manager:getPlayerTrend", (args: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const name = typeof args?.name === "string" ? args.name : null
+      if (!name) { callback({ ok: false, error: "missing name" }); return }
+      const d = db()
+      const classic = d.prepare(`
+        SELECT s.ended_at, sp.points, sp.correct,
+          (sp.correct + sp.incorrect + sp.unanswered) AS total
+        FROM session_players sp
+        JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
+        JOIN players p ON p.id = sp.player_id
+        WHERE p.real_name = ?
+        ORDER BY s.ended_at DESC
+        LIMIT 20
+      `).all(name) as any[]
+      const solo = d.prepare(`
+        SELECT sa.ended_at, sa.points, sa.correct,
+          (sa.correct + sa.incorrect + sa.unanswered) AS total
+        FROM solo_attempts sa
+        JOIN players p ON p.id = sa.player_id
+        WHERE p.real_name = ?
+        ORDER BY sa.ended_at DESC
+        LIMIT 20
+      `).all(name) as any[]
+      callback({ ok: true, classic: classic.reverse(), solo: solo.reverse() })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
+  // ── LDAP-known players with no activity in the period ────────────────────
+  socket.on("manager:getNonParticipants", (args: any, callback: any) => {
+    if (typeof callback !== "function") return
+    try {
+      const from = typeof args?.from === "string" ? args.from : null
+      const to   = typeof args?.to   === "string" ? args.to   : null
+      let cRange = ""; let sRange = ""; const rp: string[] = []
+      if (from) { cRange += " AND s.ended_at >= ?"; rp.push(from) }
+      if (to)   { cRange += " AND s.ended_at < ?";  rp.push(to) }
+      if (from) { sRange += " AND sa.ended_at >= ?"; rp.push(from) }
+      if (to)   { sRange += " AND sa.ended_at < ?";  rp.push(to) }
+      const rows = db().prepare(`
+        SELECT lp.real_name,
+          (SELECT MAX(s2.ended_at) FROM session_players sp2
+             JOIN sessions s2 ON s2.id = sp2.session_id
+             JOIN players p2 ON p2.id = sp2.player_id
+           WHERE p2.real_name = lp.real_name) AS last_classic,
+          (SELECT MAX(sa2.ended_at) FROM solo_attempts sa2
+             JOIN players p3 ON p3.id = sa2.player_id
+           WHERE p3.real_name = lp.real_name) AS last_solo
+        FROM ldap_players lp
+        WHERE NOT EXISTS (
+          SELECT 1 FROM session_players sp
+            JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
+            JOIN players p ON p.id = sp.player_id
+          WHERE p.real_name = lp.real_name${cRange}
+        ) AND NOT EXISTS (
+          SELECT 1 FROM solo_attempts sa
+            JOIN players p ON p.id = sa.player_id
+          WHERE p.real_name = lp.real_name${sRange}
+        )
+        ORDER BY lp.real_name
+      `).all(...rp)
+      callback({ ok: true, rows })
+    } catch (err: any) {
+      callback({ ok: false, error: String(err) })
+    }
+  })
+
   // Player asks on mount: "do I have an AKA?" — returns corrected name or null
   socket.on("player:checkName", (callback: any) => {
     try {
