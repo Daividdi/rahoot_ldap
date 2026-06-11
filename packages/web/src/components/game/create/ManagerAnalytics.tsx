@@ -682,31 +682,19 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [rankingCats, setRankingCats] = useState<string[]>([])
   const [rankingGroups, setRankingGroups] = useState<string[]>([])
   const [weeklyTab, setWeeklyTab] = useState<"region" | "group">("region")
-  const [lbPeriod, setLbPeriod] = useState<"week" | "month">("week")
-
-  const lbStartDate = useMemo(() => {
-    const now = new Date()
-    if (lbPeriod === "week") {
-      const d = new Date(now); const day = d.getDay(); d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); d.setHours(0, 0, 0, 0); return d
-    }
-    return new Date(now.getFullYear(), now.getMonth(), 1)
-  }, [lbPeriod])
-
-  const lbPeriodLabel = useMemo(() => {
-    const now = new Date(); const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-    if (lbPeriod === "week") {
-      const s = new Date(now); const day = s.getDay(); s.setDate(s.getDate() - (day === 0 ? 6 : day - 1))
-      return mo[s.getMonth()] + " " + s.getDate() + " – " + mo[now.getMonth()] + " " + now.getDate()
-    }
-    return mo[now.getMonth()] + " 1 – " + now.getDate()
-  }, [lbPeriod])
+  // Leaderboard rankings follow the shared period filter bar (All time /
+  // Month / Week with ‹ › navigation) instead of a private week/month toggle
+  const lbRange = useMemo(() => ({
+    from: periodRange.from ? new Date(periodRange.from) : null,
+    to: periodRange.to ? new Date(periodRange.to) : null,
+  }), [periodRange])
 
   const toggleRankingCat = (cat: string) => setRankingCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])
   const toggleRankingGroup = (g: string) => setRankingGroups(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])
 
   const weeklyTop = useMemo(() => {
     try {
-      let wq = data.filter(q => q.playedDate && q.playedDate >= lbStartDate && q.playerCount > 0)
+      let wq = data.filter(q => q.playerCount > 0 && (!lbRange.from || (q.playedDate && q.playedDate >= lbRange.from && (!lbRange.to || q.playedDate < lbRange.to))))
       if (rankingCats.length > 0) wq = wq.filter(q => rankingCats.includes(q.category))
       const byR: Record<string, Record<string, { realName: string; games: number; pts: number; c: number; t: number; nicknames: Set<string> }>> = { BR: {}, MY: {}, CN: {} }
       wq.forEach(q => {
@@ -737,11 +725,11 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       }
       return result
     } catch { return { BR: [], MY: [], CN: [] } }
-  }, [data, rankingCats, nameCorrections, applyName, minGames, lbStartDate])
+  }, [data, rankingCats, nameCorrections, applyName, minGames, lbRange])
 
   const weeklyTopByGroup = useMemo(() => {
     try {
-      let wq = data.filter(q => q.playedDate && q.playedDate >= lbStartDate && q.playerCount > 0)
+      let wq = data.filter(q => q.playerCount > 0 && (!lbRange.from || (q.playedDate && q.playedDate >= lbRange.from && (!lbRange.to || q.playedDate < lbRange.to))))
       if (rankingGroups.length > 0) wq = wq.filter(q => rankingGroups.includes(q.group))
       const byG: Record<string, Record<string, { realName: string; games: number; pts: number; c: number; t: number; nicknames: Set<string> }>> = { ATP: {}, ATD: {}, Others: {} }
       wq.forEach(q => {
@@ -772,7 +760,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       }
       return result
     } catch { return { ATP: [], ATD: [], Others: [] } }
-  }, [data, rankingGroups, nameCorrections, applyName, minGames, lbStartDate])
+  }, [data, rankingGroups, nameCorrections, applyName, minGames, lbRange])
 
   // The report is already period-filtered server-side, so it is the single
   // source of truth for every period (all/month/week).
@@ -950,9 +938,11 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
       {/* ═══ MAIN CONTENT ═══════════════════════════════════════════════════ */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* ── Inline filter bar ────────────────────────────────────────────── */}
-        {activeView !== "team" && activeView !== "leaderboard" && (
+        {activeView !== "team" && (
           <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white flex-wrap">
-            {(["all","BR","MY","CN"] as RFilter[]).map(r => {
+            {/* Leaderboard shows all regions side by side and has no author concept,
+                so it only gets the shared period controls */}
+            {activeView !== "leaderboard" && (["all","BR","MY","CN"] as RFilter[]).map(r => {
               const cnt = r === "all" ? regionStats.BR.q + regionStats.MY.q + regionStats.CN.q : regionStats[r]?.q ?? 0
               return (
                 <button key={r} onClick={() => setRFilter(r)} className={clsx("rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors", rFilter === r ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200")}>
@@ -961,7 +951,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               )
             })}
             {activeView !== "quizzes" && (<>
-              <div className="w-px h-4 bg-gray-200 mx-0.5"/>
+              {activeView !== "leaderboard" && <div className="w-px h-4 bg-gray-200 mx-0.5"/>}
               {/* All time */}
               <button
                 onClick={() => { setPFilter("all"); setPOffset(0) }}
@@ -1013,11 +1003,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                   style={{ minWidth: 20 }}
                 >›</button>
               </div>
-              <div className="w-px h-4 bg-gray-200 mx-0.5"/>
-              <select value={aFilter} onChange={e => setAFilter(e.target.value)} className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600 outline-none cursor-pointer">
-                <option value="all">All authors</option>
-                {authors.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              {activeView !== "leaderboard" && (<>
+                <div className="w-px h-4 bg-gray-200 mx-0.5"/>
+                <select value={aFilter} onChange={e => setAFilter(e.target.value)} className="rounded-lg bg-gray-50 border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600 outline-none cursor-pointer">
+                  <option value="all">All authors</option>
+                  {authors.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </>)}
             </>)}
           </div>
         )}
@@ -1547,13 +1539,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <h3 className="text-base font-semibold text-gray-800">Leaderboard — Top 10</h3>
-                    <p className="text-sm text-gray-400 mt-1">{lbPeriodLabel}</p>
+                    <p className="text-sm text-gray-400 mt-1">{pLabel}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex rounded-lg overflow-hidden border border-gray-200">
-                      <button onClick={() => setLbPeriod("week")} className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", lbPeriod === "week" ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>Weekly</button>
-                      <button onClick={() => setLbPeriod("month")} className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors border-l border-gray-200", lbPeriod === "month" ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>Monthly</button>
-                    </div>
                     <div className="flex rounded-lg overflow-hidden border border-gray-200">
                       <button onClick={() => setWeeklyTab("region")} className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors", weeklyTab === "region" ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>By Region</button>
                       <button onClick={() => setWeeklyTab("group")} className={clsx("px-3 py-1.5 text-xs font-semibold transition-colors border-l border-gray-200", weeklyTab === "group" ? "bg-primary text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>By Group</button>
