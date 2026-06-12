@@ -666,7 +666,9 @@ class Game {
       teamMode: true,
       teamScores: this.getTeamScores(),
     } : {}
-    this.sendStatus(this.manager.id, STATUS.SHOW_LEADERBOARD, {
+    // Broadcast to the whole room so players also watch the animated
+    // ranking swap after each question, not just the manager screen
+    this.broadcastStatus(STATUS.SHOW_LEADERBOARD, {
       oldLeaderboard: oldLeaderboard.slice(0, 5),
       leaderboard: this.leaderboard.slice(0, 5),
       ...teamData,

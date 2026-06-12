@@ -9,6 +9,7 @@ import Result from "@rahoot/web/components/game/states/Result"
 import Start from "@rahoot/web/components/game/states/Start"
 import Wait from "@rahoot/web/components/game/states/Wait"
 import TeamSelect from "@rahoot/web/components/game/states/TeamSelect"
+import Leaderboard from "@rahoot/web/components/game/states/Leaderboard"
 import PlayerPodium from "@rahoot/web/components/game/states/PlayerPodium"
 import ReviewQuestions from "@rahoot/web/components/game/states/ReviewQuestions"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
@@ -25,6 +26,7 @@ const PLAYER_STATES = new Set([
   STATUS.SHOW_START,
   STATUS.SHOW_RESULT,
   STATUS.SHOW_PREPARED,
+  STATUS.SHOW_LEADERBOARD,
   STATUS.FINISHED,
   STATUS.REVIEW_QUESTIONS,
 ])
@@ -72,7 +74,7 @@ const Game = () => {
   // Full-screen podium — no GameWrapper chrome
   if (status?.name === STATUS.FINISHED) {
     return (
-      <section className="relative flex min-h-dvh w-full flex-col justify-between" style={{ background: "linear-gradient(135deg, #005f8a 0%, #009edf 50%, #0078b0 100%)" }}>
+      <section className="relative flex h-dvh w-full flex-col justify-between overflow-hidden" style={{ background: "linear-gradient(135deg, #005f8a 0%, #009edf 50%, #0078b0 100%)" }}>
         <PlayerPodium data={status.data} />
       </section>
     )
@@ -101,6 +103,9 @@ const Game = () => {
       break
     case STATUS.SELECT_TEAM:
       component = <TeamSelect data={status.data} />
+      break
+    case STATUS.SHOW_LEADERBOARD:
+      component = <Leaderboard data={status.data} />
       break
     case STATUS.REVIEW_QUESTIONS:
       component = <ReviewQuestions data={status.data} />

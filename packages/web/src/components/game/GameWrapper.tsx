@@ -1,6 +1,6 @@
 "use client"
 
-import { Status } from "@rahoot/common/types/game/status"
+import { STATUS, Status } from "@rahoot/common/types/game/status"
 import background from "@rahoot/web/assets/background_screen.webp"
 import Button from "@rahoot/web/components/Button"
 import Loader from "@rahoot/web/components/Loader"
@@ -42,7 +42,12 @@ const GameWrapper = ({ children, statusName, onNext, manager, autoPlay, countdow
   }
 
   return (
-    <section className="relative flex min-h-dvh w-full flex-col justify-between">
+    <section className={clsx(
+      "relative flex min-h-dvh w-full flex-col justify-between",
+      // Podium is a fixed full-screen scene — clip it so nothing (confetti,
+      // rising columns, reaction bar) ever produces a scrollbar
+      statusName === STATUS.FINISHED && "h-dvh overflow-hidden",
+    )}>
       <div className="fixed top-0 left-0 -z-10 h-full w-full bg-white opacity-30">
         <Image
           className="pointer-events-none h-full w-full object-cover opacity-30"
