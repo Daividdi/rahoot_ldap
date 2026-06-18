@@ -24,6 +24,12 @@
       "os": ["current", "linux"],
       "cpu": ["current", "x64"],
       "libc": ["current", "glibc", "musl"]
+    },
+    "overrides": {
+      "ws@>=8.0.0 <8.21.0": ">=8.21.0",
+      "socket.io-parser@<4.2.6": ">=4.2.6",
+      "postcss@<8.5.10": ">=8.5.10",
+      "dompurify@<3.4.9": ">=3.4.9"
     }
   }
 }
