@@ -34,7 +34,7 @@ function AutoTextarea({ value, onChange, className, placeholder, style }: {
       onChange={(e) => onChange(e.target.value)}
       onInput={resize}
       className={className}
-      style={{ resize: "none", overflow: "hidden", ...style }}
+      style={{ resize: "none", overflow: "hidden", display: "block", ...style }}
     />
   )
 }
@@ -643,7 +643,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
 
               {/* Question text */}
               <AutoTextarea
-                className="mb-3 w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-2.5 text-sm font-medium text-gray-800 placeholder:text-gray-400 focus:border-primary outline-none leading-snug"
+                className="mb-3 w-full rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium leading-relaxed text-gray-800 placeholder:text-gray-400 outline-none transition-colors focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                 placeholder="Type the question here..."
                 value={q.question}
                 onChange={(v) => updateQuestion(qi, "question", v)}
@@ -654,7 +654,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                 {q.image ? (
                   <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 group">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={q.image} alt="" className="w-full object-contain max-h-56 rounded-xl" style={{ background: "#f8f9fa" }} />
+                    <img src={q.image} alt="" className="w-full object-contain max-h-56 rounded-xl ring-1 ring-inset ring-black/10" style={{ background: "#f8f9fa" }} />
                     <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <label className="cursor-pointer flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-primary transition-colors">
                         ✎ Change
@@ -682,9 +682,9 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               {/* Answer options */}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 {q.answers.map((a: string, ai: number) => (
-                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex min-h-20 items-stretch transition-all", ANSWER_COLORS[ai], (Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) ? "ring-2 ring-green-400 ring-offset-1" : "")}>
-                    {/* Square image zone — stretches with the card height */}
-                    <div className="relative w-20 shrink-0 self-stretch bg-black/10 overflow-hidden group/img">
+                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex min-h-20 items-stretch shadow-sm transition focus-within:shadow-md focus-within:brightness-[1.04]", ANSWER_COLORS[ai], (Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) ? "ring-2 ring-green-400 ring-offset-1" : "")}>
+                    {/* Color/image zone — stretches with the card height, with a soft divider */}
+                    <div className="relative w-20 shrink-0 self-stretch bg-black/10 overflow-hidden group/img shadow-[inset_-1px_0_0_rgba(0,0,0,0.12)]">
                       {q.answerImages?.[ai] ? (
                         <>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -709,7 +709,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                       )}
                     </div>
                     {/* Text area */}
-                    <div className="flex flex-1 items-center gap-2 px-3 py-2 min-w-0">
+                    <div className="flex flex-1 items-center gap-2.5 px-3.5 py-2.5 min-w-0">
                       {q.multipleAnswers ? (
                         <input
                           type="checkbox"
@@ -730,13 +730,13 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                         </span>
                       ) : (
                         <AutoTextarea
-                          className="flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none min-w-0 leading-snug"
+                          className="flex-1 bg-transparent text-[15px] font-semibold leading-relaxed text-white placeholder:text-white/60 placeholder:font-medium focus:outline-none min-w-0 [text-shadow:0_1px_1px_rgba(0,0,0,0.12)]"
                           placeholder={`Answer ${ANSWER_LABELS[ai]}`}
                           value={a}
                           onChange={(v) => updateAnswer(qi, ai, v)}
                         />
                       )}
-                      {(Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-400 text-[11px] font-bold text-white">✓</span>}
+                      {(Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) && <span className="flex h-5 w-5 shrink-0 items-center justify-center self-center rounded-full bg-green-400 text-[11px] font-bold text-white shadow-sm ring-2 ring-white/40">✓</span>}
                     </div>
                   </div>
                 ))}
