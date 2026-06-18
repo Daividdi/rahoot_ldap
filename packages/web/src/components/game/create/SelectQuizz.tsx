@@ -8,6 +8,37 @@ import toast from "react-hot-toast"
 import { useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useRouter } from "next/navigation"
 
+// Textarea que quebra linha e cresce com o conteúdo (auto-size), substituindo
+// o input de uma linha que truncava textos longos no editor.
+function AutoTextarea({ value, onChange, className, placeholder, style }: {
+  value: string
+  onChange: (_v: string) => void
+  className?: string
+  placeholder?: string
+  style?: React.CSSProperties
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const resize = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = el.scrollHeight + "px"
+  }
+  useEffect(() => { resize() }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onInput={resize}
+      className={className}
+      style={{ resize: "none", overflow: "hidden", ...style }}
+    />
+  )
+}
+
 type Props = {
   quizzList: QuizzWithId[]
   onSelect: (_id: string, _mode?: "classic" | "team") => void
@@ -611,11 +642,11 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               </div>
 
               {/* Question text */}
-              <input
-                className="mb-3 w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-2.5 text-sm font-medium text-gray-800 placeholder:text-gray-400 focus:border-primary outline-none"
+              <AutoTextarea
+                className="mb-3 w-full rounded-lg border-2 border-gray-200 bg-gray-50 p-2.5 text-sm font-medium text-gray-800 placeholder:text-gray-400 focus:border-primary outline-none leading-snug"
                 placeholder="Type the question here..."
                 value={q.question}
-                onChange={(e) => updateQuestion(qi, "question", e.target.value)}
+                onChange={(v) => updateQuestion(qi, "question", v)}
               />
 
               {/* Question image */}
@@ -651,9 +682,9 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
               {/* Answer options */}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 {q.answers.map((a: string, ai: number) => (
-                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex h-20 transition-all", ANSWER_COLORS[ai], (Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) ? "ring-2 ring-green-400 ring-offset-1" : "")}>
-                    {/* Square image zone */}
-                    <div className="relative w-20 h-20 shrink-0 bg-black/10 overflow-hidden group/img">
+                  <div key={ai} className={clsx("rounded-xl overflow-hidden flex min-h-20 items-stretch transition-all", ANSWER_COLORS[ai], (Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) ? "ring-2 ring-green-400 ring-offset-1" : "")}>
+                    {/* Square image zone — stretches with the card height */}
+                    <div className="relative w-20 shrink-0 self-stretch bg-black/10 overflow-hidden group/img">
                       {q.answerImages?.[ai] ? (
                         <>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -678,7 +709,7 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                       )}
                     </div>
                     {/* Text area */}
-                    <div className="flex flex-1 items-center gap-2 px-3">
+                    <div className="flex flex-1 items-center gap-2 px-3 py-2 min-w-0">
                       {q.multipleAnswers ? (
                         <input
                           type="checkbox"
@@ -698,11 +729,11 @@ const SelectQuizz = ({ quizzList, onSelect, onListChange, regionFilter = "all" }
                           {a || "Image answer"}
                         </span>
                       ) : (
-                        <input
-                          className="flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none min-w-0"
+                        <AutoTextarea
+                          className="flex-1 bg-transparent text-sm font-semibold text-white placeholder:text-white/50 focus:outline-none min-w-0 leading-snug"
                           placeholder={`Answer ${ANSWER_LABELS[ai]}`}
                           value={a}
-                          onChange={(e) => updateAnswer(qi, ai, e.target.value)}
+                          onChange={(v) => updateAnswer(qi, ai, v)}
                         />
                       )}
                       {(Array.isArray(q.solution) ? q.solution.includes(ai) : q.solution === ai) && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-400 text-[11px] font-bold text-white">✓</span>}
