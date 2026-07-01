@@ -8,3 +8,6 @@ dist
 offline/deps
 offline/images
 offline/assets
+
+# exclude nested workspace node_modules (pnpm monorepo) so the image uses the in-Docker install
+**/node_modules
