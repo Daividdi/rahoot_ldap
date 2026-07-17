@@ -616,6 +616,20 @@ io.on("connection", (socket) => {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const safeName = newQuiz.id || (newQuiz.subject.toLowerCase().replace(/[^a-z0-9]/g, '-') + "-" + Date.now() + ".json");
       const filePath = path.join(dir, safeName.endsWith('.json') ? safeName : safeName + '.json');
+      // Editing an existing quiz reuses this same event, and the editor's
+      // client-side copy can go stale (e.g. someone runs the quiz while the
+      // manager still has the editor open) — the game-end handler writes
+      // results straight to disk without refreshing the manager's quiz list.
+      // Always keep whatever is on disk for result fields so an edit save
+      // can never erase results a session just recorded.
+      if (fs.existsSync(filePath)) {
+        try {
+          const onDisk = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+          for (const k of ["lastSessionStats", "totalGamesPlayed", "cancelledQuestions"]) {
+            if (onDisk[k] !== undefined) newQuiz[k] = onDisk[k];
+          }
+        } catch {}
+      }
       fs.writeFileSync(filePath, JSON.stringify(newQuiz, null, 2));
     } catch (err: any) {
       console.error("Error creating quiz:", err);
