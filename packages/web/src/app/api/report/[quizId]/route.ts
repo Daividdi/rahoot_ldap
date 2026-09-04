@@ -93,7 +93,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           ];
         }
 
-        if (sessaoPedida === 'solo:all') {
+        // No explicit session and the quiz file has no lastSessionStats
+        // (quiz only ever played in solo): fall back to the most recent
+        // session in the DB so the report is never blank when data exists.
+        let sessaoEfetiva = sessaoPedida;
+        if (!sessaoEfetiva && (!rawData.lastSessionStats || rawData.lastSessionStats.length === 0) && rawData.sessions && rawData.sessions.length > 0) {
+          sessaoEfetiva = rawData.sessions[0].id;
+        }
+        if (sessaoEfetiva === 'solo:all') {
           // Uma linha por TENTATIVA, nao por pessoa. Quem praticou tres vezes
           // aparece tres vezes, com o numero da tentativa ao lado do nome —
           // assim da para ver a evolucao, e nada e escondido. O preco, que vale
@@ -135,7 +142,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
             };
           });
           rawData.selectedSession = 'solo:all';
-        } else if (sessaoPedida) {
+        } else if (sessaoEfetiva) {
           const linhas = db.prepare(
             `SELECT p.client_id AS clientId, p.real_name AS realName, p.username AS username,
                     p.avatar_3d_id AS avatar3dId, sp.points AS points, sp.rank AS rank,
@@ -144,7 +151,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
                JOIN players p ON p.id = sp.player_id
               WHERE sp.session_id = ?
               ORDER BY sp.rank ASC`
-          ).all(sessaoPedida) as any[];
+          ).all(sessaoEfetiva) as any[];
 
           rawData.lastSessionStats = linhas.map((l) => {
             let answers: any[] = [];
