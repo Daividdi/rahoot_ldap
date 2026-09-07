@@ -846,9 +846,9 @@ io.on("connection", (socket) => {
     } catch (err) { console.error("Profile fetch error:", err); }
   });
 
-  socket.on("solo:getQuiz" as any, ({ quizId, realName }: any) => {
+  socket.on("solo:getQuiz" as any, ({ quizId, realName, account }: any) => {
     try {
-      const resp = getSoloQuizFor(String(quizId || ""), String(realName || ""));
+      const resp = getSoloQuizFor(String(quizId || ""), String(realName || ""), String(account || ""));
       socket.emit("solo:quiz" as any, resp);
     } catch (err) {
       console.error("solo:getQuiz error:", err);
@@ -930,6 +930,16 @@ io.on("connection", (socket) => {
              ON CONFLICT(account, display_name) DO UPDATE SET last_seen_at = excluded.last_seen_at`
           ).run(result.account, result.fullName, now, now)
         } catch (e) { console.error("ldap_identities:", e) }
+        try {
+          // The player row may already exist from a classic game, where nobody
+          // signs in and the row is keyed by the typed name. This is the moment
+          // that row learns who it belongs to. Only fills a blank -- see
+          // ensurePlayer() for why it never overwrites.
+          db().prepare(
+            `UPDATE players SET account = ?
+              WHERE LOWER(real_name) = LOWER(?) AND (account IS NULL OR account = '')`
+          ).run(result.account, result.fullName)
+        } catch (e) { console.error("players.account:", e) }
       }
       callback(result)
     } catch (err) {

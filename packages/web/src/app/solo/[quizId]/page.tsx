@@ -26,6 +26,9 @@ import {
 } from "@rahoot/web/utils/soloAnswers"
 
 const REAL_NAME_KEY = "rahoot_v2_name"
+// The sAMAccountName of whoever signed in. Kept beside the name because the
+// name is only a label: this is what an outside system (Moodle) can match on.
+const ACCOUNT_KEY = "rahoot_v2_account"
 const KEEP_KEY = "rahoot_keep_logged"
 
 type SoloQuestion = {
@@ -152,6 +155,7 @@ export default function SoloGamePage() {
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [realName, setRealName] = useState<string>("")
+  const [account, setAccount] = useState<string>("")
   const [needName, setNeedName] = useState(false)
   const [ldapUser, setLdapUser] = useState("")
   const [ldapPass, setLdapPass] = useState("")
@@ -220,12 +224,14 @@ export default function SoloGamePage() {
       const session = sessionStorage.getItem(REAL_NAME_KEY)
       if (session) {
         setRealName(session)
+        setAccount(sessionStorage.getItem(ACCOUNT_KEY) || "")
         return
       }
       if (localStorage.getItem(KEEP_KEY) === "1") {
         const local = localStorage.getItem(REAL_NAME_KEY)
         if (local) {
           setRealName(local)
+          setAccount(localStorage.getItem(ACCOUNT_KEY) || "")
           return
         }
       }
@@ -239,7 +245,7 @@ export default function SoloGamePage() {
   useEffect(() => {
     if (!socket || !isConnected || !quizId || !realName || needName) return
     setStage("loading")
-    ;(socket as any).emit("solo:getQuiz", { quizId, realName })
+    ;(socket as any).emit("solo:getQuiz", { quizId, realName, account })
     const handler = (data: SoloQuizResp) => {
       setResp(data)
       if (!data.ok) {
@@ -261,7 +267,7 @@ export default function SoloGamePage() {
     return () => {
       ;(socket as any).off("solo:quiz", handler)
     }
-  }, [socket, isConnected, quizId, realName, needName])
+  }, [socket, isConnected, quizId, realName, account, needName])
 
   // ── Result listener ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -400,6 +406,7 @@ export default function SoloGamePage() {
       const payload = {
         quizId: quiz.id,
         realName,
+        account,
         username: realName,
         startedAt: new Date().toISOString(),
         answers,
@@ -451,14 +458,18 @@ export default function SoloGamePage() {
             if (res?.ok) {
               try {
                 sessionStorage.setItem(REAL_NAME_KEY, res.fullName)
+                sessionStorage.setItem(ACCOUNT_KEY, res.account || "")
                 if (keepLoggedIn) {
                   localStorage.setItem(REAL_NAME_KEY, res.fullName)
+                  localStorage.setItem(ACCOUNT_KEY, res.account || "")
                   localStorage.setItem(KEEP_KEY, "1")
                 } else {
                   localStorage.removeItem(REAL_NAME_KEY)
+                  localStorage.removeItem(ACCOUNT_KEY)
                   localStorage.removeItem(KEEP_KEY)
                 }
               } catch {}
+              setAccount(res.account || "")
               setRealName(res.fullName)
               setNeedName(false)
             } else {

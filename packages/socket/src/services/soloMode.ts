@@ -62,17 +62,41 @@ function findPlayerIdByName(realName: string): string | null {
   return r?.id ?? null
 }
 
-function ensurePlayer(realName: string, username: string): string {
-  const existing = findPlayerIdByName(realName)
-  if (existing) return existing
+/**
+ * The account is the only identifier that survives an AD rename, so it is tried
+ * before the name. A rename can leave two player rows on one account; the most
+ * recently seen is the live one.
+ */
+function findPlayerIdByAccount(account: string): string | null {
+  const key = (account || "").trim().toLowerCase()
+  if (!key) return null
+  const r = db()
+    .prepare("SELECT id FROM players WHERE account = ? ORDER BY last_seen_at DESC LIMIT 1")
+    .get(key) as { id: string } | undefined
+  return r?.id ?? null
+}
+
+function ensurePlayer(realName: string, username: string, account?: string): string {
+  const conta = (account || "").trim().toLowerCase()
+  const existing = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName)
+  if (existing) {
+    // Stamp the account on a row that predates it (or was created by a classic
+    // game, where nobody authenticates). Only ever fills a blank: overwriting
+    // would let a shared machine reassign someone else's history.
+    if (conta) {
+      db().prepare("UPDATE players SET account = ? WHERE id = ? AND (account IS NULL OR account = '')")
+        .run(conta, existing)
+    }
+    return existing
+  }
   const id = randomUUID()
   const now = new Date().toISOString()
   db()
     .prepare(
-      `INSERT INTO players (id, client_id, real_name, username, created_at, last_seen_at)
-       VALUES (?, NULL, ?, ?, ?, ?)`
+      `INSERT INTO players (id, client_id, real_name, username, account, created_at, last_seen_at)
+       VALUES (?, NULL, ?, ?, ?, ?, ?)`
     )
-    .run(id, realName.trim(), username.trim() || realName.trim(), now, now)
+    .run(id, realName.trim(), username.trim() || realName.trim(), conta || null, now, now)
   db().prepare("INSERT OR IGNORE INTO player_progress (player_id) VALUES (?)").run(id)
   return id
 }
@@ -82,14 +106,25 @@ function loadQuiz(quizId: string): any {
   return list.find((q: any) => q.id === quizId) ?? null
 }
 
-function countAttempts(playerId: string, quizId: string): number {
-  const r = db()
-    .prepare("SELECT COUNT(*) AS n FROM solo_attempts WHERE player_id = ? AND quiz_id = ?")
-    .get(playerId, quizId) as { n: number }
+function countAttempts(playerId: string, quizId: string, account?: string): number {
+  const conta = (account || "").trim().toLowerCase()
+  // With an account the count spans every player row that account owns, so a
+  // rename does not silently hand someone three fresh attempts.
+  const r = conta
+    ? (db()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM solo_attempts a
+             JOIN players p ON p.id = a.player_id
+            WHERE p.account = ? AND a.quiz_id = ?`
+        )
+        .get(conta, quizId) as { n: number })
+    : (db()
+        .prepare("SELECT COUNT(*) AS n FROM solo_attempts WHERE player_id = ? AND quiz_id = ?")
+        .get(playerId, quizId) as { n: number })
   return r.n
 }
 
-export function getSoloQuizFor(quizId: string, realName: string): SoloQuizResponse {
+export function getSoloQuizFor(quizId: string, realName: string, account?: string): SoloQuizResponse {
   const quiz = loadQuiz(quizId)
   if (!quiz) return { ok: false, reason: "not_found" }
 
@@ -99,9 +134,10 @@ export function getSoloQuizFor(quizId: string, realName: string): SoloQuizRespon
   const maxAttempts = Number(solo.maxAttempts) > 0 ? Number(solo.maxAttempts) : DEFAULT_MAX_ATTEMPTS
 
   let attemptsUsed = 0
-  if (realName.trim()) {
-    const pid = findPlayerIdByName(realName)
-    if (pid) attemptsUsed = countAttempts(pid, quizId)
+  const conta = (account || "").trim().toLowerCase()
+  if (conta || realName.trim()) {
+    const pid = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName)
+    if (pid) attemptsUsed = countAttempts(pid, quizId, conta)
   }
 
   if (attemptsUsed >= maxAttempts) {
@@ -131,6 +167,8 @@ export function getSoloQuizFor(quizId: string, realName: string): SoloQuizRespon
 export interface SoloSubmitInput {
   quizId: string
   realName: string
+  /** sAMAccountName from the LDAP sign-in that opened this run, when there was one. */
+  account?: string
   username?: string
   avatarUrl?: string
   startedAt: string
@@ -174,9 +212,10 @@ export function submitSoloAttempt(input: SoloSubmitInput): SoloSubmitResponse {
 
   const realName = input.realName.trim()
   const username = (input.username || realName).trim()
-  const playerId = ensurePlayer(realName, username)
+  const conta = (input.account || "").trim().toLowerCase()
+  const playerId = ensurePlayer(realName, username, conta)
 
-  const attemptsUsed = countAttempts(playerId, input.quizId)
+  const attemptsUsed = countAttempts(playerId, input.quizId, conta)
   if (attemptsUsed >= maxAttempts) {
     return { ok: false, reason: "no_attempts_left" }
   }

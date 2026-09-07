@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS players (
   client_id     TEXT UNIQUE,
   real_name     TEXT NOT NULL,
   username      TEXT NOT NULL,
+  account       TEXT,  -- see ensurePlayerAccountColumn(); its index is created there
   avatar_json   TEXT,
   created_at    TEXT NOT NULL,
   last_seen_at  TEXT NOT NULL
@@ -292,6 +293,45 @@ function ensureAvatarKindColumns(): void {
 }
 
 
+/**
+ * Puts the AD account (sAMAccountName) on the player row itself.
+ *
+ * `ldap_identities` already knew the account, but nothing carried it into the
+ * player, so every consumer outside Rahoot had to re-derive the person from a
+ * display name. That is the guess this column removes: Moodle authenticates
+ * against the same directory, so `players.account` and `user.username` are the
+ * same string and a score can be attributed with no name matching at all.
+ *
+ * Deliberately NOT unique. An AD rename gives one account two display names and
+ * therefore, historically, two player rows; a unique index would make the
+ * backfill throw on exactly the case the column exists to describe. Consumers
+ * group by account instead.
+ */
+function ensurePlayerAccountColumn(): void {
+  const cols = _db!.prepare("PRAGMA table_info(players)").all() as Array<{ name: string }>
+  if (!new Set(cols.map(c => c.name)).has("account")) {
+    _db!.exec("ALTER TABLE players ADD COLUMN account TEXT")
+    console.log("[db] added players.account")
+  }
+  _db!.exec("CREATE INDEX IF NOT EXISTS idx_players_account ON players(account)")
+
+  // Backfill from the identities already recorded, but only where the display
+  // name maps to exactly one account. An ambiguous name is left null on
+  // purpose: a wrong account is worse than a missing one, because it would
+  // credit one person's training to another. Runs every boot and is idempotent,
+  // so a player who logs in tomorrow gets linked without a manual step.
+  const r = _db!.prepare(`
+    UPDATE players
+       SET account = (SELECT MIN(i.account) FROM ldap_identities i
+                       WHERE LOWER(i.display_name) = LOWER(players.real_name))
+     WHERE account IS NULL
+       AND (SELECT COUNT(DISTINCT i.account) FROM ldap_identities i
+             WHERE LOWER(i.display_name) = LOWER(players.real_name)) = 1
+  `).run()
+  const n = Number(r.changes || 0)
+  if (n > 0) console.log(`[db] linked ${n} player(s) to an AD account`)
+}
+
 function ensureLdapPlayersTable(): void {
   _db!.exec("CREATE TABLE IF NOT EXISTS ldap_players (real_name TEXT PRIMARY KEY)")
 
@@ -332,7 +372,7 @@ export const Database = {
     _db.exec("PRAGMA journal_mode = WAL")
     _db.exec("PRAGMA foreign_keys = ON")
     _db.exec(SCHEMA_SQL)
-    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable()
+    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable(); ensurePlayerAccountColumn()
 
     if (!isMigrated()) {
       console.log("[db] migrating history.json …")
