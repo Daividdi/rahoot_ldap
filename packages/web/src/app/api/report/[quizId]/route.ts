@@ -79,14 +79,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
         // cinquenta pessoas praticando encheria o seletor e ninguem acharia as
         // turmas ao vivo no meio.
         const resumoSolo = db.prepare(
-          `SELECT COUNT(*) AS attempts, MIN(s.started_at) AS first, MAX(s.started_at) AS last
+          `SELECT COUNT(*) AS attempts, COUNT(DISTINCT sp.player_id) AS people,
+                  MIN(s.started_at) AS first, MAX(s.started_at) AS last
              FROM sessions s
              JOIN session_players sp ON sp.session_id = s.id
             WHERE s.mode = 'solo' AND (s.quiz_id = ? OR s.quiz_id = ?)`
         ).get(quizId, idSemJson) as any;
 
         if (resumoSolo && Number(resumoSolo.attempts) > 0) {
+          // Duas visoes do solo, nesta ordem — a media entra PRIMEIRO e por
+          // isso vira o padrao quando o quiz so foi jogado em solo:
+          //   solo:avg  -> uma linha por PESSOA = media das tentativas dela
+          //   solo:all  -> uma linha por TENTATIVA (evolucao, detalhe por pergunta)
+          // A Malasia pediu "average score": com o limite de tentativas, a nota
+          // do aluno e a media do que ele fez.
           rawData.sessions = [
+            { id: 'solo:avg', kind: 'solo_avg', startedAt: resumoSolo.last,
+              endedAt: resumoSolo.last, players: Number(resumoSolo.people) },
             { id: 'solo:all', kind: 'solo', startedAt: resumoSolo.last,
               endedAt: resumoSolo.last, players: Number(resumoSolo.attempts) },
             ...(rawData.sessions || []),
@@ -100,7 +109,56 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
         if (!sessaoEfetiva && (!rawData.lastSessionStats || rawData.lastSessionStats.length === 0) && rawData.sessions && rawData.sessions.length > 0) {
           sessaoEfetiva = rawData.sessions[0].id;
         }
-        if (sessaoEfetiva === 'solo:all') {
+        if (sessaoEfetiva === 'solo:avg') {
+          // Uma linha por PESSOA = media das tentativas dela.
+          //
+          // `accuracy` e a media das acuracias POR TENTATIVA (correct sobre
+          // respondidas), com cada tentativa pesando igual — que e o que
+          // "media" quer dizer. Como toda tentativa do mesmo quiz tem o mesmo
+          // numero de perguntas, isso coincide com o total agregado na pratica.
+          //
+          // Sem detalhe por pergunta (`answers: []`): uma media nao mapeia
+          // questao a questao. Quem quiser isso troca para "All attempts".
+          const linhas = db.prepare(
+            `SELECT p.client_id AS clientId, p.real_name AS realName, p.username AS username,
+                    p.avatar_3d_id AS avatar3dId,
+                    COUNT(*)        AS attempts,
+                    AVG(sp.points)  AS avgPoints,
+                    AVG(sp.correct) AS avgCorrect,
+                    AVG(sp.unanswered) AS avgUnanswered,
+                    AVG(100.0 * sp.correct / MAX(1, sp.correct + sp.incorrect + sp.unanswered)) AS avgAccuracy
+               FROM sessions s
+               JOIN session_players sp ON sp.session_id = s.id
+               JOIN players p ON p.id = sp.player_id
+              WHERE s.mode = 'solo' AND (s.quiz_id = ? OR s.quiz_id = ?)
+              GROUP BY sp.player_id
+              ORDER BY avgPoints DESC`
+          ).all(quizId, idSemJson) as any[];
+
+          rawData.lastSessionStats = linhas.map((l) => {
+            const nome = nameCorrections[l.clientId || l.realName || ''] || l.realName;
+            const tentativas = Number(l.attempts) || 0;
+            // O sufixo so aparece para quem tentou mais de uma vez — deixa
+            // explicito que a linha e uma media, nao uma tentativa unica.
+            const rotulo = tentativas > 1 ? `${nome} (avg of ${tentativas})` : nome;
+            return {
+              clientId: l.clientId,
+              username: rotulo,
+              realName: rotulo,
+              avatarUrl: l.avatar3dId ? `/api/avatar3d/r3/icons/${l.avatar3dId}` : null,
+              points: Math.round(Number(l.avgPoints) || 0),
+              // Agregados EXPLICITOS: a pagina os usa direto quando existem, em
+              // vez de recomputar a partir de `answers` (aqui vazio).
+              accuracy: Math.round(Number(l.avgAccuracy) || 0),
+              correctCount: Math.round(Number(l.avgCorrect) || 0),
+              unanswered: Math.round(Number(l.avgUnanswered) || 0),
+              attemptsCount: tentativas,
+              answers: [],
+              connected: false,
+            };
+          });
+          rawData.selectedSession = 'solo:avg';
+        } else if (sessaoEfetiva === 'solo:all') {
           // Uma linha por TENTATIVA, nao por pessoa. Quem praticou tres vezes
           // aparece tres vezes, com o numero da tentativa ao lado do nome —
           // assim da para ver a evolucao, e nada e escondido. O preco, que vale
