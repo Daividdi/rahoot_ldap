@@ -5,7 +5,24 @@ import { DatabaseSync } from 'node:sqlite';
 
 export async function GET(request: Request, { params }: { params: Promise<{ quizId: string }> }) {
   try {
-    const resolvedParams = await params;
+    // The report contains every player's answers. Keep the endpoint behind
+    // the same manager password used by the Rahoot admin area.
+    const managerPassword = request.headers.get("x-manager-password") || ""
+    const configRoot = process.env.CONFIG_PATH || path.join(process.cwd(), "../../config")
+    const gameConfigPath = path.join(configRoot, "game.json")
+    let configuredPassword = ""
+
+    try {
+      configuredPassword = JSON.parse(fs.readFileSync(gameConfigPath, "utf-8")).managerPassword || ""
+    } catch {
+      return NextResponse.json({ error: "Manager authentication is unavailable" }, { status: 503 })
+    }
+
+    if (!managerPassword || !configuredPassword || managerPassword !== configuredPassword) {
+      return NextResponse.json({ error: "Manager authentication required" }, { status: 401 })
+    }
+
+    const resolvedParams = await params
     const quizId = resolvedParams.quizId.endsWith('.json') ? resolvedParams.quizId : resolvedParams.quizId + '.json';
     
     // O Next.js roda dentro do container na pasta /app/packages/web

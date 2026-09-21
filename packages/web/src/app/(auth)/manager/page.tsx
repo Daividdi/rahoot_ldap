@@ -7,13 +7,15 @@ import ManagerDashboard from "@rahoot/web/components/game/create/ManagerDashboar
 import AuthLoader from "@rahoot/web/components/AuthLoader"
 import { useEvent, useSocket } from "@rahoot/web/contexts/socketProvider"
 import { useManagerStore } from "@rahoot/web/stores/manager"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
 
 const Manager = () => {
   const { setGameId, setStatus } = useManagerStore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { socket } = useSocket()
+  const soloQuiz = searchParams.get("soloQuiz")?.trim() || ""
 
   const [isAuth, setIsAuth] = useState(false)
   const [isCheckingAuth, setIsCheckingAuth] = useState(false)
@@ -21,6 +23,7 @@ const Manager = () => {
 
   useEffect(() => {
     const savedPassword = sessionStorage.getItem("manager_auth_token")
+
     if (savedPassword && socket) {
       setIsCheckingAuth(true)
       socket.emit("manager:auth", savedPassword)
@@ -31,6 +34,10 @@ const Manager = () => {
     setIsAuth(true)
     setIsCheckingAuth(false)
     setQuizzList(quizzList)
+
+    if (soloQuiz) {
+      router.replace(`/reports/${encodeURIComponent(soloQuiz)}?session=solo:all`)
+    }
   })
 
   useEvent("manager:errorMessage", () => {

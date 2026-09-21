@@ -604,13 +604,16 @@ export default function SoloGamePage() {
     return (
       <Shell>
         <div className="flex flex-col gap-3">
-          <div>
-            <p className="text-primary text-[10px] font-bold tracking-widest uppercase">
-              Solo Mode
-            </p>
-            <h2 className="text-lg font-bold text-gray-800">
-              {resp.quiz.subject}
-            </h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-primary text-[10px] font-bold tracking-widest uppercase">
+                Solo Mode
+              </p>
+              <h2 className="text-lg font-bold text-gray-800">
+                {resp.quiz.subject}
+              </h2>
+            </div>
+            <AdminResultsLink quizId={quizId} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Questions" value={resp.quiz.questions.length} />
@@ -994,13 +997,16 @@ export default function SoloGamePage() {
     return (
       <Shell wide>
         <div className="flex flex-col items-center gap-4 text-center">
-          <div>
-            <p className="text-primary text-[11px] font-bold tracking-widest uppercase">
-              Attempt {result.attemptNumber} of {result.maxAttempts}
-            </p>
-            <h2 className="text-xl font-bold text-gray-800">
-              {result.isPerfect ? "🎯 Perfect score!" : "Quiz complete"}
-            </h2>
+          <div className="flex w-full items-start justify-between gap-3 text-left">
+            <div>
+              <p className="text-primary text-[11px] font-bold tracking-widest uppercase">
+                Attempt {result.attemptNumber} of {result.maxAttempts}
+              </p>
+              <h2 className="text-xl font-bold text-gray-800">
+                {result.isPerfect ? "🎯 Perfect score!" : "Quiz complete"}
+              </h2>
+            </div>
+            <AdminResultsLink quizId={quizId} />
           </div>
 
           <div className="grid w-full grid-cols-4 gap-2">
@@ -1079,6 +1085,22 @@ export default function SoloGamePage() {
     <Shell>
       <div className="py-8 text-center text-sm text-gray-400">…</div>
     </Shell>
+  )
+}
+
+function AdminResultsLink({ quizId }: { quizId: string }) {
+  return (
+    <a
+      href={`/manager?soloQuiz=${encodeURIComponent(quizId)}`}
+      title="Manager access"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-[10px] font-bold tracking-wide text-gray-500 transition-colors hover:border-primary/40 hover:text-primary"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M12 3 4 6v5c0 5 3.4 8.9 8 10 4.6-1.1 8-5 8-10V6l-8-3Z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      Admin results
+    </a>
   )
 }
 
