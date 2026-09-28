@@ -13,6 +13,7 @@ interface LeaderRow {
   rank: number
   playerId: string
   realName: string
+  displayName?: string
   username: string
   avatarJson: string | null
   avatarKind: "dicebear" | "3d"
@@ -33,6 +34,7 @@ interface HallOfFameEntry {
     rank: number
     playerId: string
     realName: string
+    displayName?: string
     points: number
     games: number
   }>
@@ -109,7 +111,7 @@ function LeaderTable({ rows, period }: { rows: LeaderRow[]; period: string }) {
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate font-semibold text-white">{row.realName}</span>
+                <span className="truncate font-semibold text-white">{row.displayName || row.realName}</span>
                 <TierBadge tier={row.tier} level={row.level} size="sm" />
               </div>
               <div className="text-xs text-white/50">
@@ -162,7 +164,7 @@ function HallOfFameList({ entries, emptyMsg }: { entries: HallOfFameEntry[]; emp
                   className="flex items-center gap-2 text-sm"
                 >
                   <span className="w-6 text-center">{medalFor(t.rank)}</span>
-                  <span className="flex-1 truncate text-white">{t.realName}</span>
+                  <span className="flex-1 truncate text-white">{t.displayName || t.realName}</span>
                   <span className="tabular-nums font-semibold text-amber-200">
                     {t.points.toLocaleString("en-US")}
                   </span>

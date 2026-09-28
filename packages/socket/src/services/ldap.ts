@@ -125,10 +125,8 @@ function parseResultCode(buf: Buffer): number {
   return 255
 }
 
-// Parse first displayName from SearchResultEntry
-function parseDisplayName(buf: Buffer): string | null {
-  // Look for the string 'displayName' in the buffer then grab the value after it
-  const marker = Buffer.from('displayName')
+function parseAttributeValue(buf: Buffer, attribute: string): string | null {
+  const marker = Buffer.from(attribute)
   let pos = buf.indexOf(marker)
   if (pos < 0) return null
   pos += marker.length
@@ -144,7 +142,13 @@ function parseDisplayName(buf: Buffer): string | null {
     const lb = buf[pos] & 0x7f; pos++
     for (let j = 0; j < lb; j++) { vlen = (vlen << 8) | buf[pos++] }
   } else { vlen = buf[pos++] }
+  if (pos + vlen > buf.length) return null
   return buf.slice(pos, pos + vlen).toString('utf8')
+}
+
+// Parse an attribute from SearchResultEntry.
+function parseDisplayName(buf: Buffer): string | null {
+  return parseAttributeValue(buf, 'displayName')
 }
 
 
@@ -183,7 +187,7 @@ export type LdapAuthResult =
   // `account` is the sAMAccountName the user actually authenticated with. It is
   // the only stable identifier here: `fullName` is an abbreviation of the AD
   // displayName and changes whenever the AD record is corrected.
-  | { ok: true;  fullName: string; account: string }
+  | { ok: true;  fullName: string; account: string; displayName: string }
   | { ok: false; error: string }
 
 export async function ldapAuthenticate(username: string, password: string): Promise<LdapAuthResult> {
@@ -221,11 +225,15 @@ export async function ldapAuthenticate(username: string, password: string): Prom
       }
     }
 
+    // Empty when the directory returned no displayName: callers must not store a
+    // login id as somebody's full name.
+    const fullDisplayName = (displayName || '').trim()
     conn.destroy()
     return {
       ok: true,
       fullName: abbreviateForUsername(displayName || username),
       account: username.toLowerCase(),
+      displayName: fullDisplayName,
     }
   } catch (err: any) {
     conn?.destroy()
@@ -233,4 +241,74 @@ export async function ldapAuthenticate(username: string, password: string): Prom
     if (msg.includes('timeout')) return { ok: false, error: 'Authentication service unavailable' }
     return { ok: false, error: 'Authentication error' }
   }
+}
+
+export type AccountDisplayName = { account: string; displayName: string }
+
+let missingServiceAccountLogged = false
+
+/** Look up full AD display names for existing accounts with an isolated LDAP connection per account. */
+export async function lookupDisplayNamesForAccounts(accounts: string[]): Promise<AccountDisplayName[]> {
+  if (!LDAP_SVC_USER || !LDAP_SVC_PASS) {
+    if (!missingServiceAccountLogged) {
+      console.warn('[ldap] display-name backfill skipped: service account is not configured')
+      missingServiceAccountLogged = true
+    }
+    return []
+  }
+
+  const { host, port } = parseHost(LDAP_URL)
+  const candidates = [...new Set(accounts.map(account => account.trim().toLowerCase()).filter(Boolean))].slice(0, 500)
+  const names: AccountDisplayName[] = []
+  let failedLookups = 0
+
+  for (const account of candidates) {
+    let conn: LdapConn | null = null
+    try {
+      try {
+        conn = await connect(host, port)
+      } catch {
+        console.warn('[ldap] display-name backfill skipped: directory is unavailable or timed out')
+        break
+      }
+
+      let bindResp: Buffer
+      try {
+        conn.write(buildBind(1, LDAP_SVC_USER, LDAP_SVC_PASS))
+        bindResp = await conn.read()
+      } catch {
+        console.warn('[ldap] display-name backfill skipped: service bind timed out or failed')
+        break
+      }
+      if (parseResultCode(bindResp) !== 0) {
+        console.warn('[ldap] display-name backfill skipped: service account bind failed')
+        break
+      }
+
+      let response: Buffer
+      try {
+        conn.write(buildSearch(2, LDAP_SEARCH_BASE, account, ['displayName', 'sAMAccountName']))
+        response = await conn.read()
+      } catch {
+        console.warn('[ldap] display-name backfill stopped after an LDAP search timeout or failure')
+        break
+      }
+      const returnedAccount = parseAttributeValue(response, 'sAMAccountName')?.trim()
+      const displayName = parseDisplayName(response)?.trim()
+      if (returnedAccount?.toLowerCase() === account && displayName) {
+        names.push({ account, displayName })
+      } else {
+        failedLookups++
+      }
+    } catch {
+      failedLookups++
+    } finally {
+      conn?.destroy()
+    }
+  }
+
+  if (failedLookups > 0) {
+    console.warn(`[ldap] skipped ${failedLookups} display-name lookup(s)`)
+  }
+  return names
 }

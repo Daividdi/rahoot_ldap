@@ -19,6 +19,23 @@ type Attempt = {
   endedAt: string;
 };
 
+type Average = { percent: number; correct: number; total: number; points: number };
+
+function roundToTwo(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function averageAttempts(attempts: Attempt[]): Average {
+  const mean = (value: (attempt: Attempt) => number) =>
+    attempts.reduce((sum, attempt) => sum + value(attempt), 0) / attempts.length;
+  return {
+    percent: roundToTwo(mean(attempt => attempt.percent)),
+    correct: roundToTwo(mean(attempt => attempt.correct)),
+    total: roundToTwo(mean(attempt => attempt.total)),
+    points: Math.round(mean(attempt => attempt.points)),
+  };
+}
+
 /**
  * Solo results for one quiz, keyed by AD account.
  *
@@ -90,12 +107,20 @@ export async function GET(request: Request) {
     const db = new DatabaseSync(dbPath, { readOnly: true });
     let rows: any[] = [];
     try {
+      const hasDisplayNames = Boolean(db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+      ).get('account_display_names'));
+      const displayNameSql = hasDisplayNames ? 'COALESCE(n.full_name, p.real_name)' : 'p.real_name';
+      const displayNameJoin = hasDisplayNames
+        ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account)'
+        : '';
       rows = db
         .prepare(
-          `SELECT p.account AS account, p.real_name AS name,
+          `SELECT p.account AS account, ${displayNameSql} AS name,
                   a.attempt_number, a.points, a.correct, a.incorrect, a.unanswered, a.ended_at
              FROM solo_attempts a
              JOIN players p ON p.id = a.player_id
+             ${displayNameJoin}
             WHERE (a.quiz_id = ? OR a.quiz_id = ?)
             ORDER BY a.ended_at ASC`
         )
@@ -132,6 +157,7 @@ export async function GET(request: Request) {
         account: p.account,
         name: p.name,
         attempts: p.attempts.length,
+        average: averageAttempts(p.attempts),
         best,
         last,
       };

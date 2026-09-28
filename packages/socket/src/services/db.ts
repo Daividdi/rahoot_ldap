@@ -360,6 +360,14 @@ function ensureLdapPlayersTable(): void {
   _db!.exec("CREATE INDEX IF NOT EXISTS idx_ldap_identities_name ON ldap_identities(display_name)")
 }
 
+function ensureAccountDisplayNamesTable(): void {
+  _db!.exec(`CREATE TABLE IF NOT EXISTS account_display_names (
+    account    TEXT PRIMARY KEY,
+    full_name  TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export const Database = {
@@ -372,7 +380,7 @@ export const Database = {
     _db.exec("PRAGMA journal_mode = WAL")
     _db.exec("PRAGMA foreign_keys = ON")
     _db.exec(SCHEMA_SQL)
-    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable(); ensurePlayerAccountColumn()
+    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable(); ensurePlayerAccountColumn(); ensureAccountDisplayNamesTable()
 
     if (!isMigrated()) {
       console.log("[db] migrating history.json …")

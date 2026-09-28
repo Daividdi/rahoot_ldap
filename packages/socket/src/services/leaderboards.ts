@@ -14,6 +14,7 @@ export interface LeaderRow {
   rank: number
   playerId: string
   realName: string
+  displayName: string
   username: string
   avatarJson: string | null
   avatarKind: "dicebear" | "3d"
@@ -72,6 +73,7 @@ function periodLeaderboard(
     .prepare(
       `SELECT sp.player_id  AS playerId,
               p.real_name   AS realName,
+              COALESCE(n.full_name, p.real_name) AS displayName,
               p.username    AS username,
               p.avatar_json AS avatarJson,
               p.avatar_kind AS avatarKind,
@@ -86,6 +88,7 @@ function periodLeaderboard(
          JOIN sessions s ON s.id = sp.session_id
          JOIN players  p ON p.id = sp.player_id
          JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
+    LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
         GROUP BY sp.player_id
@@ -97,6 +100,7 @@ function periodLeaderboard(
       rank: i + 1,
       playerId: r.playerId,
       realName: r.realName,
+      displayName: r.displayName,
       username: r.username,
       avatarJson: r.avatarJson,
       avatarKind: r.avatarKind === "3d" ? "3d" : "dicebear",
@@ -179,6 +183,7 @@ export interface HallOfFameEntry {
     rank: number
     playerId: string
     realName: string
+    displayName: string
     points: number
     games: number
   }>
@@ -195,16 +200,18 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
   const out: HallOfFameEntry[] = []
   const fetchTop = db().prepare(
     `SELECT ws.rank, ws.points, ws.games, ws.player_id AS playerId,
-            p.real_name AS realName
+            p.real_name AS realName,
+            COALESCE(n.full_name, p.real_name) AS displayName
        FROM weekly_snapshots ws
        JOIN players p ON p.id = ws.player_id
        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
-      WHERE ws.week_iso = ? AND ws.rank <= 3'
+       LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+      WHERE ws.week_iso = ? AND ws.rank <= 3
       ORDER BY ws.rank ASC`
   )
   for (const { w } of weeks) {
     const rows = fetchTop.all(w) as Array<{
-      rank: number; points: number; games: number; playerId: string; realName: string
+      rank: number; points: number; games: number; playerId: string; realName: string; displayName: string
     }>
     out.push({
       period: w,
@@ -233,7 +240,7 @@ export function getMonthlyHallOfFame(limitPeriods = 12): HallOfFameEntry[] {
       displayLabel: formatMonth(m),
       top: top.map(r => ({
         rank: r.rank, points: r.points, games: r.games,
-        playerId: r.playerId, realName: r.realName,
+        playerId: r.playerId, realName: r.realName, displayName: r.displayName,
       })),
     })
   }

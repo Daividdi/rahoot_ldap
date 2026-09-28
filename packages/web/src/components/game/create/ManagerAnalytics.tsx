@@ -179,11 +179,11 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const [nameCorrections, setNameCorrections] = useState<Record<string, string>>({})
 
   type SoloQuizStat = { quiz_id: string; quiz_title: string; total_attempts: number; unique_players: number; avg_accuracy: number; best_score: number; last_played: string }
-  type SoloPlayerStat = { real_name: string; total_attempts: number; quizzes_played: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
-  type SoloDetail = { real_name: string; quiz_id: string; quiz_title: string; attempts: number; best_correct: number; best_points: number; best_accuracy: number; last_played: string }
-  type TeamPlayerStat = { real_name: string; games_played: number; avg_rank: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
+  type SoloPlayerStat = { real_name: string; display_name?: string; total_attempts: number; quizzes_played: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
+  type SoloDetail = { real_name: string; display_name?: string; quiz_id: string; quiz_title: string; attempts: number; best_correct: number; best_points: number; best_accuracy: number; last_played: string }
+  type TeamPlayerStat = { real_name: string; display_name?: string; games_played: number; avg_rank: number; total_correct: number; total_wrong: number; avg_accuracy: number; best_points: number; last_played: string }
   type TeamQuizStat = { quiz_id: string; quiz_title: string; total_sessions: number; unique_players: number; avg_accuracy: number; best_score: number; last_played: string }
-  type TeamDetail = { real_name: string; quiz_id: string; quiz_title: string; sessions: number; total_correct: number; best_points: number; avg_accuracy: number; best_rank: number; last_played: string }
+  type TeamDetail = { real_name: string; display_name?: string; quiz_id: string; quiz_title: string; sessions: number; total_correct: number; best_points: number; avg_accuracy: number; best_rank: number; last_played: string }
   type SoloReport = { ok: true; quizStats: SoloQuizStat[]; playerStats: SoloPlayerStat[]; detail: SoloDetail[]; teamStats: TeamPlayerStat[]; teamQuizStats: TeamQuizStat[]; teamDetail: TeamDetail[] } | { ok: false; error: string }
 
   const [soloReport, setSoloReport] = useState<SoloReport | null>(null)
@@ -769,14 +769,15 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     const soloMap = new Map(soloReport.playerStats.map(p => [p.real_name, p]))
     const teamMap = new Map(soloReport.teamStats.map(p => [p.real_name, p]))
     const allNames = Array.from(new Set([...soloMap.keys(), ...teamMap.keys()]))
-    return allNames.map(name => ({
-      name,
-      solo_games: soloMap.get(name)?.total_attempts ?? 0,
-      solo_acc: soloMap.get(name)?.avg_accuracy ?? 0,
-      solo_correct: soloMap.get(name)?.total_correct ?? 0,
-      team_games: teamMap.get(name)?.games_played ?? 0,
-      team_acc: teamMap.get(name)?.avg_accuracy ?? 0,
-      team_correct: teamMap.get(name)?.total_correct ?? 0,
+    return allNames.map(real_name => ({
+      real_name,
+      name: soloMap.get(real_name)?.display_name || teamMap.get(real_name)?.display_name || real_name,
+      solo_games: soloMap.get(real_name)?.total_attempts ?? 0,
+      solo_acc: soloMap.get(real_name)?.avg_accuracy ?? 0,
+      solo_correct: soloMap.get(real_name)?.total_correct ?? 0,
+      team_games: teamMap.get(real_name)?.games_played ?? 0,
+      team_acc: teamMap.get(real_name)?.avg_accuracy ?? 0,
+      team_correct: teamMap.get(real_name)?.total_correct ?? 0,
     }))
   }, [soloReport])
 
@@ -792,7 +793,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   // Off by default: with it on the list stops being "who played" and becomes
   // "everyone", which is a different question and a much longer list.
   const [participationShowAll, setParticipationShowAll] = useState(false)
-  const [participationMeta, setParticipationMeta] = useState<{ sessions: number; roster: string[]; months: string[] }>({ sessions: 0, roster: [], months: [] })
+  const [participationMeta, setParticipationMeta] = useState<{ sessions: number; roster: string[]; rosterDisplayNames: Record<string, string>; months: string[] }>({ sessions: 0, roster: [], rosterDisplayNames: {}, months: [] })
   const [participationSort, setParticipationSort] = useState<"count" | "pts" | "name">("count")
   const [participationRegion, setParticipationRegion] = useState<"all" | "BR" | "MY" | "CN">("all")
   useEffect(() => { if (activeView === "participation") setParticipationRegion(rFilter as "all" | "BR" | "MY" | "CN") }, [rFilter, activeView])
@@ -807,7 +808,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     ;(socket as any).timeout(20000).emit("manager:getDayParticipation", args, (err: any, res: any) => {
       setDayRows(!err && res?.ok ? res.rows : [])
       if (!err && res?.ok) {
-        setParticipationMeta({ sessions: res.sessions ?? 0, roster: res.roster ?? [], months: res.months ?? [] })
+        setParticipationMeta({ sessions: res.sessions ?? 0, roster: res.roster ?? [], rosterDisplayNames: res.rosterDisplayNames ?? {}, months: res.months ?? [] })
       }
     })
   }, [socket, participationPeriod, participationMode])
@@ -815,13 +816,14 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
   const dayParticipation = useMemo(() => {
     if (!participationPeriod || !dayRows) return []
     const regionOf = new Map(data.map(q => [q.id, q.region]))
-    const players: Record<string, { name: string; count: number; pts: number; c: number; t: number; quizzes: string[] }> = {}
+    const players: Record<string, { name: string; identityName: string; count: number; pts: number; c: number; t: number; quizzes: string[] }> = {}
     dayRows.forEach((r: any) => {
       const region = regionOf.get(r.quiz_id) || "BR"
       if (participationRegion !== "all" && region !== participationRegion) return
       const key = r.real_name || ""; if (!key) return
-      const display = applyName(key, key)
-      if (!players[key]) players[key] = { name: display, count: 0, pts: 0, c: 0, t: 0, quizzes: [] }
+      const identityName = applyName(key, key)
+      const display = applyName(key, r.display_name || key)
+      if (!players[key]) players[key] = { name: display, identityName, count: 0, pts: 0, c: 0, t: 0, quizzes: [] }
       players[key].count++; players[key].pts += r.points || 0
       players[key].c += r.correct || 0
       players[key].t += (r.correct || 0) + (r.incorrect || 0) + (r.unanswered || 0)
@@ -829,7 +831,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     })
     const nameMap: Record<string, string> = {}; const merged: typeof players = {}
     Object.entries(players).forEach(([key, val]) => {
-      const norm = val.name.toLowerCase().trim()
+      const norm = val.identityName.toLowerCase().trim()
       if (nameMap[norm]) {
         const ek = nameMap[norm]; merged[ek].count += val.count; merged[ek].pts += val.pts; merged[ek].c += val.c; merged[ek].t += val.t
         val.quizzes.forEach(q => { if (!merged[ek].quizzes.includes(q)) merged[ek].quizzes.push(q) })
@@ -839,12 +841,13 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
     // filter: someone who did not play has no quiz, therefore no region, and
     // would show up under every region tab as if they belonged to it.
     if (participationShowAll && participationRegion === "all") {
-      const vistos = new Set(Object.values(merged).map(v => v.name.toLowerCase().trim()))
+      const vistos = new Set(Object.values(merged).map(v => v.identityName.toLowerCase().trim()))
       participationMeta.roster.forEach(rn => {
-        const display = applyName(rn, rn)
-        if (vistos.has(display.toLowerCase().trim())) return
-        vistos.add(display.toLowerCase().trim())
-        merged["zero:" + rn] = { name: display, count: 0, pts: 0, c: 0, t: 0, quizzes: [] }
+        const identityName = applyName(rn, rn)
+        if (vistos.has(identityName.toLowerCase().trim())) return
+        vistos.add(identityName.toLowerCase().trim())
+        const display = applyName(rn, participationMeta.rosterDisplayNames[rn] || rn)
+        merged["zero:" + rn] = { name: display, identityName, count: 0, pts: 0, c: 0, t: 0, quizzes: [] }
       })
     }
     const result = Object.values(merged).map(p => ({ ...p, avgPts: p.count > 0 ? Math.round(p.pts / p.count) : 0, acc: p.t > 0 ? Math.round(p.c / p.t * 100) : 0 }))
@@ -1787,7 +1790,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                     <span className="rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-500">{nonParticipants.length} player{nonParticipants.length !== 1 ? "s" : ""}</span>
                   )}
                   <button
-                    onClick={() => nonParticipants && downloadCsv("non-participants.csv", nonParticipants.map((r: any) => ({ player: r.real_name, last_classic: r.last_classic || "never", last_solo: r.last_solo || "never" })))}
+                    onClick={() => nonParticipants && downloadCsv("non-participants.csv", nonParticipants.map((r: any) => ({ player: r.display_name || r.real_name, last_classic: r.last_classic || "never", last_solo: r.last_solo || "never" })))}
                     className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
                     Export CSV
                   </button>
@@ -1805,7 +1808,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                       const ago = last ? (() => { try { const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000); return days === 0 ? "today" : `${days}d ago` } catch { return "" } })() : null
                       return (
                         <div key={r.real_name} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
-                          <span className="truncate text-[13px] font-medium text-gray-700">{r.real_name}</span>
+                          <span className="truncate text-[13px] font-medium text-gray-700">{r.display_name || r.real_name}</span>
                           <span className={clsx("shrink-0 text-[10px] font-semibold", ago ? "text-gray-400" : "text-red-400")}>{ago ? `last ${ago}` : "never played"}</span>
                         </div>
                       )
@@ -1840,9 +1843,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
                 const q2 = soloSearch.trim().toLowerCase()
                 const dir = soloSort.dir === "asc" ? 1 : -1
-                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
+                const ps = [...(q2 ? psAll.filter(p => `${p.display_name || ""} ${p.real_name || ""}`.toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
                   switch (soloSort.key) {
-                    case "name":     return dir * a.real_name.localeCompare(b.real_name)
+                    case "name":     return dir * (a.display_name || a.real_name).localeCompare(b.display_name || b.real_name)
                     case "attempts": return dir * (a.total_attempts - b.total_attempts)
                     case "quizzes":  return dir * (a.quizzes_played - b.quizzes_played)
                     case "correct":  return dir * (a.total_correct - b.total_correct)
@@ -1926,7 +1929,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
                         />
                         <button
-                          onClick={() => downloadCsv("solo-players.csv", ps.map(p => ({ player: p.real_name, quizzes: p.quizzes_played, attempts: p.total_attempts, correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
+                          onClick={() => downloadCsv("solo-players.csv", ps.map(p => ({ player: p.display_name || p.real_name, quizzes: p.quizzes_played, attempts: p.total_attempts, correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
                           className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
                           Export CSV
                         </button>
@@ -1971,7 +1974,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
                                 style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
                                 onClick={() => { setSoloExpandedPlayer(isExp ? null : p.real_name); if (!isExp) fetchPlayerTrend(p.real_name) }}>
-                                <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
+                                <span className="text-sm font-semibold text-gray-700 truncate">{p.display_name || p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.quizzes_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_attempts}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_correct}</span>
@@ -2039,9 +2042,9 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                 const avgAcc = psAll.length > 0 ? Math.round(psAll.reduce((s, p) => s + p.avg_accuracy, 0) / psAll.length) : 0
                 const q2 = teamSearch.trim().toLowerCase()
                 const dir = teamSort.dir === "asc" ? 1 : -1
-                const ps = [...(q2 ? psAll.filter(p => (p.real_name || "").toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
+                const ps = [...(q2 ? psAll.filter(p => `${p.display_name || ""} ${p.real_name || ""}`.toLowerCase().includes(q2)) : psAll)].sort((a, b) => {
                   switch (teamSort.key) {
-                    case "name":    return dir * a.real_name.localeCompare(b.real_name)
+                    case "name":    return dir * (a.display_name || a.real_name).localeCompare(b.display_name || b.real_name)
                     case "games":   return dir * (a.games_played - b.games_played)
                     case "rank":    return dir * (a.avg_rank - b.avg_rank)
                     case "correct": return dir * (a.total_correct - b.total_correct)
@@ -2117,7 +2120,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 outline-none focus:border-primary bg-white w-44"
                         />
                         <button
-                          onClick={() => downloadCsv("classic-players.csv", ps.map(p => ({ player: p.real_name, games: p.games_played, avg_rank: Math.round(p.avg_rank || 0), correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
+                          onClick={() => downloadCsv("classic-players.csv", ps.map(p => ({ player: p.display_name || p.real_name, games: p.games_played, avg_rank: Math.round(p.avg_rank || 0), correct: p.total_correct, best_points: p.best_points ?? 0, accuracy_pct: Math.round(p.avg_accuracy || 0) })))}
                           className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 hover:text-primary hover:border-primary/40 transition-colors">
                           Export CSV
                         </button>
@@ -2146,7 +2149,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                               <div className="grid gap-3 items-center px-3 py-3 cursor-pointer hover:bg-gray-50"
                                 style={{ gridTemplateColumns: "1fr 60px 70px 60px 70px 110px 24px" }}
                                 onClick={() => { setTeamExpandedPlayer(isExp ? null : p.real_name); if (!isExp) fetchPlayerTrend(p.real_name) }}>
-                                <span className="text-sm font-semibold text-gray-700 truncate">{p.real_name}</span>
+                                <span className="text-sm font-semibold text-gray-700 truncate">{p.display_name || p.real_name}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.games_played}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">#{Math.round(p.avg_rank)}</span>
                                 <span className="text-sm text-gray-700 text-center tabular-nums">{p.total_correct}</span>
@@ -2198,7 +2201,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
               {!soloLoading && (() => {
                 const cq = combinedSearch.trim().toLowerCase()
                 const rows = combinedRows
-                  .filter(r => !cq || r.name.toLowerCase().includes(cq))
+                .filter(r => !cq || r.name.toLowerCase().includes(cq) || r.real_name.toLowerCase().includes(cq))
                   .filter(r => !combinedMinGames || (r.team_games + r.solo_games) >= 3)
 
                 const cDir = combinedSort.dir === "asc" ? 1 : -1
@@ -2254,7 +2257,7 @@ export default function ManagerAnalytics({ quizzList, initialRegion = "all", onS
                           const tc = ta >= 65 ? "#22c55e" : ta >= 50 ? "#009edf" : ta >= 35 ? "#f59e0b" : ta > 0 ? "#ef4444" : "#d1d5db"
                           const sc = sa >= 65 ? "#22c55e" : sa >= 50 ? "#009edf" : sa >= 35 ? "#f59e0b" : sa > 0 ? "#ef4444" : "#d1d5db"
                           return (
-                            <div key={r.name} className="grid gap-2 items-center rounded-xl px-3 py-3 hover:bg-gray-50 transition-colors"
+                            <div key={r.real_name} className="grid gap-2 items-center rounded-xl px-3 py-3 hover:bg-gray-50 transition-colors"
                               style={{ gridTemplateColumns: "1fr repeat(2, 130px) repeat(2, 80px)" }}>
                               <span className="text-sm font-semibold text-gray-700 truncate">{r.name}</span>
                               <div className="flex items-center gap-2">

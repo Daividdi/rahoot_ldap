@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
       rawData.lastSessionStats = rawData.lastSessionStats.map((player: any) => {
         const key = player.clientId || player.realName || player.username || '';
         if (key && nameCorrections[key]) {
-          return { ...player, realName: nameCorrections[key] };
+          return { ...player, displayName: nameCorrections[key] };
         }
         return player;
       });
@@ -75,6 +75,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
       if (fs.existsSync(dbPath)) {
         // Somente leitura: este processo nunca escreve no banco do jogo.
         const db = new DatabaseSync(dbPath, { readOnly: true });
+        const hasDisplayNames = Boolean(db.prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+        ).get('account_display_names'));
+        const displayNameSql = hasDisplayNames ? 'COALESCE(n.full_name, p.real_name)' : 'p.real_name';
+        const displayNameJoin = hasDisplayNames
+          ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account)'
+          : '';
 
         rawData.sessions = db.prepare(
           `SELECT s.id, s.started_at AS startedAt, s.ended_at AS endedAt,
@@ -137,23 +144,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           // Sem detalhe por pergunta (`answers: []`): uma media nao mapeia
           // questao a questao. Quem quiser isso troca para "All attempts".
           const linhas = db.prepare(
-            `SELECT p.client_id AS clientId, p.real_name AS realName, p.username AS username,
+            `SELECT p.client_id AS clientId, p.real_name AS realName,
+                    ${displayNameSql} AS displayName, p.username AS username,
                     p.avatar_3d_id AS avatar3dId,
                     COUNT(*)        AS attempts,
                     AVG(sp.points)  AS avgPoints,
                     AVG(sp.correct) AS avgCorrect,
                     AVG(sp.unanswered) AS avgUnanswered,
-                    AVG(100.0 * sp.correct / MAX(1, sp.correct + sp.incorrect + sp.unanswered)) AS avgAccuracy
+                    AVG(sp.correct + sp.incorrect + sp.unanswered) AS avgTotal,
+                    AVG(ROUND((1.0 * sp.correct / MAX(1, sp.correct + sp.incorrect + sp.unanswered)) * 10000) / 100.0) AS avgAccuracy
                FROM sessions s
                JOIN session_players sp ON sp.session_id = s.id
                JOIN players p ON p.id = sp.player_id
+               ${displayNameJoin}
               WHERE s.mode = 'solo' AND (s.quiz_id = ? OR s.quiz_id = ?)
               GROUP BY sp.player_id
               ORDER BY avgPoints DESC`
           ).all(quizId, idSemJson) as any[];
 
           rawData.lastSessionStats = linhas.map((l) => {
-            const nome = nameCorrections[l.clientId || l.realName || ''] || l.realName;
+            const correction = nameCorrections[l.clientId || l.realName || ''];
+            const nome = correction || l.realName;
+            const displayName = correction || l.displayName || l.realName;
             const tentativas = Number(l.attempts) || 0;
             // O sufixo so aparece para quem tentou mais de uma vez — deixa
             // explicito que a linha e uma media, nao uma tentativa unica.
@@ -161,14 +173,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
             return {
               clientId: l.clientId,
               username: rotulo,
-              realName: rotulo,
+              realName: l.realName,
+              displayName: tentativas > 1 ? `${displayName} (avg of ${tentativas})` : displayName,
               avatarUrl: l.avatar3dId ? `/api/avatar3d/r3/icons/${l.avatar3dId}` : null,
               points: Math.round(Number(l.avgPoints) || 0),
               // Agregados EXPLICITOS: a pagina os usa direto quando existem, em
               // vez de recomputar a partir de `answers` (aqui vazio).
-              accuracy: Math.round(Number(l.avgAccuracy) || 0),
-              correctCount: Math.round(Number(l.avgCorrect) || 0),
-              unanswered: Math.round(Number(l.avgUnanswered) || 0),
+              accuracy: Math.round((Number(l.avgAccuracy) || 0) * 100 + Number.EPSILON) / 100,
+              correctCount: Math.round((Number(l.avgCorrect) || 0) * 100 + Number.EPSILON) / 100,
+              totalCount: Math.round((Number(l.avgTotal) || 0) * 100 + Number.EPSILON) / 100,
+              unanswered: Math.round((Number(l.avgUnanswered) || 0) * 100 + Number.EPSILON) / 100,
               attemptsCount: tentativas,
               answers: [],
               connected: false,
@@ -182,13 +196,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           // dizer em voz alta: quem tentou mais pesa mais nas estatisticas por
           // pergunta.
           const linhas = db.prepare(
-            `SELECT p.client_id AS clientId, p.real_name AS realName, p.username AS username,
+            `SELECT p.client_id AS clientId, p.real_name AS realName,
+                    ${displayNameSql} AS displayName, p.username AS username,
                     p.avatar_3d_id AS avatar3dId, sp.points AS points, sp.answers_json AS answersJson,
                     ROW_NUMBER() OVER (PARTITION BY sp.player_id ORDER BY s.started_at) AS tentativa,
                     COUNT(*)     OVER (PARTITION BY sp.player_id)                       AS total
                FROM sessions s
                JOIN session_players sp ON sp.session_id = s.id
                JOIN players p ON p.id = sp.player_id
+               ${displayNameJoin}
               WHERE s.mode = 'solo' AND (s.quiz_id = ? OR s.quiz_id = ?)
               ORDER BY sp.points DESC`
           ).all(quizId, idSemJson) as any[];
@@ -196,20 +212,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           rawData.lastSessionStats = linhas.map((l) => {
             let answers: any[] = [];
             try { answers = JSON.parse(l.answersJson || '[]'); } catch { answers = []; }
-            const nome = nameCorrections[l.clientId || l.realName || ''] || l.realName;
+            const correction = nameCorrections[l.clientId || l.realName || ''];
+            const nome = correction || l.realName;
+            const displayName = correction || l.displayName || l.realName;
             return {
               clientId: l.clientId,
-              // Os DOIS campos recebem a mesma string, e isso e proposital.
-              //
-              // A tela imprime `username` em destaque e so mostra `realName`
-              // embaixo QUANDO os dois diferem. Iguais, sai uma linha limpa com
-              // nome e tentativa; diferentes, o nome aparecia duas vezes. E o
-              // `username` e o que vai para o Excel e o PDF, entao o numero da
-              // tentativa precisa estar nele de qualquer forma.
-              //
-              // O sufixo so existe para quem tentou mais de uma vez.
+              // Keep the original attempt label and identity key separate from the display name.
               username: Number(l.total) > 1 ? `${nome} (${l.tentativa}/${l.total})` : nome,
-              realName: Number(l.total) > 1 ? `${nome} (${l.tentativa}/${l.total})` : nome,
+              realName: l.realName,
+              displayName: Number(l.total) > 1 ? `${displayName} (${l.tentativa}/${l.total})` : displayName,
               avatarUrl: l.avatar3dId ? `/api/avatar3d/r3/icons/${l.avatar3dId}` : null,
               points: l.points,
               answers,
@@ -219,11 +230,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           rawData.selectedSession = 'solo:all';
         } else if (sessaoEfetiva) {
           const linhas = db.prepare(
-            `SELECT p.client_id AS clientId, p.real_name AS realName, p.username AS username,
+            `SELECT p.client_id AS clientId, p.real_name AS realName,
+                    ${displayNameSql} AS displayName, p.username AS username,
                     p.avatar_3d_id AS avatar3dId, sp.points AS points, sp.rank AS rank,
                     sp.answers_json AS answersJson
                FROM session_players sp
                JOIN players p ON p.id = sp.player_id
+               ${displayNameJoin}
               WHERE sp.session_id = ?
               ORDER BY sp.rank ASC`
           ).all(sessaoEfetiva) as any[];
@@ -234,7 +247,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
             return {
               clientId: l.clientId,
               username: l.username,
-              realName: nameCorrections[l.clientId || l.realName || ''] || l.realName,
+              realName: l.realName,
+              displayName: nameCorrections[l.clientId || l.realName || ''] || l.displayName || l.realName,
               avatarUrl: l.avatar3dId ? `/api/avatar3d/r3/icons/${l.avatar3dId}` : null,
               points: l.points,
               answers,
