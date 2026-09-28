@@ -88,7 +88,7 @@ function periodLeaderboard(
          JOIN sessions s ON s.id = sp.session_id
          JOIN players  p ON p.id = sp.player_id
          JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
-    LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+    LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
         GROUP BY sp.player_id
@@ -205,7 +205,7 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
        FROM weekly_snapshots ws
        JOIN players p ON p.id = ws.player_id
        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
-       LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+       LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
       WHERE ws.week_iso = ? AND ws.rank <= 3
       ORDER BY ws.rank ASC`
   )

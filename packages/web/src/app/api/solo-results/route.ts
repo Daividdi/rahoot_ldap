@@ -110,9 +110,11 @@ export async function GET(request: Request) {
       const hasDisplayNames = Boolean(db.prepare(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
       ).get('account_display_names'));
+      // The full name is skipped when another account shares the abbreviated name:
+      // such a row can hold two people's classic games.
       const displayNameSql = hasDisplayNames ? 'COALESCE(n.full_name, p.real_name)' : 'p.real_name';
       const displayNameJoin = hasDisplayNames
-        ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account)'
+        ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))'
         : '';
       rows = db
         .prepare(

@@ -41,7 +41,7 @@ async function backfillAccountDisplayNames(): Promise<void> {
     const accounts = db().prepare(`
       SELECT DISTINCT LOWER(p.account) AS account
       FROM players p
-      LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+      LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
       WHERE p.account IS NOT NULL AND TRIM(p.account) <> '' AND n.account IS NULL
       ORDER BY account
       LIMIT ?
@@ -79,6 +79,10 @@ async function backfillAccountDisplayNames(): Promise<void> {
 setImmediate(() => { void backfillAccountDisplayNames() })
 setInterval(() => { void backfillAccountDisplayNames() }, DISPLAY_NAME_BACKFILL_INTERVAL_MS).unref()
 
+// A player row whose abbreviated name is shared by ANOTHER account (two people
+// who both abbreviate to e.g. "Muhammad Abdullah") keeps the abbreviated name:
+// classic games are keyed by that name, so the row can hold both people's games
+// and any single full name would credit one person with the other's play.
 function displayNameForLdapPlayer(realNameSql: string): string {
   return `COALESCE((
     SELECT CASE WHEN COUNT(DISTINCT LOWER(p.account)) = 1 THEN MAX(n.full_name) END
@@ -86,7 +90,7 @@ function displayNameForLdapPlayer(realNameSql: string): string {
     JOIN ldap_identities i
       ON LOWER(i.account) = LOWER(p.account)
      AND LOWER(i.display_name) = LOWER(${realNameSql})
-    LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+    LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
     WHERE p.real_name = ${realNameSql}
   ), ${realNameSql})`
 }
@@ -300,7 +304,7 @@ io.on("connection", (socket) => {
              FROM sessions s
              JOIN session_players sp ON sp.session_id = s.id
              JOIN players p ON p.id = sp.player_id
-             LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+             LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
             WHERE s.mode = 'solo' ${quizId ? "AND s.quiz_id = ?" : ""}
             ORDER BY s.started_at DESC`
         )
@@ -378,7 +382,7 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
-        LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
         WHERE 1=1${saRange}
         GROUP BY sa.player_id
         ORDER BY avg_accuracy DESC, total_correct DESC
@@ -398,7 +402,7 @@ io.on("connection", (socket) => {
           MAX(sa.ended_at) AS last_played
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
-        LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
         WHERE 1=1${saRange}
         GROUP BY sa.player_id, sa.quiz_id
         ORDER BY p.real_name, sa.quiz_id
@@ -418,7 +422,7 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
-        LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
         WHERE 1=1${sRange}
         GROUP BY sp.player_id
         ORDER BY avg_accuracy DESC
@@ -451,7 +455,7 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON sp.session_id = s.id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
-        LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
         WHERE 1=1${sRange}
         GROUP BY sp.player_id, s.quiz_id
         ORDER BY p.real_name, s.quiz_id
@@ -483,7 +487,7 @@ io.on("connection", (socket) => {
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
-        LEFT JOIN account_display_names n ON n.account = LOWER(p.account)
+        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
         WHERE ${where}
       `).all(arg)
 
