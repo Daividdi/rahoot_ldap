@@ -53,12 +53,26 @@ export type SoloQuizResponse =
       maxAttempts?: number
     }
 
-function findPlayerIdByName(realName: string): string | null {
+function findPlayerIdByName(realName: string, account = ""): string | null {
   const key = normName(realName)
   if (!key) return null
-  const r = db()
-    .prepare("SELECT id FROM players WHERE LOWER(real_name) = ? LIMIT 1")
-    .get(key) as { id: string } | undefined
+  const conta = account.trim().toLowerCase()
+  // With an account in hand, never adopt a row that already belongs to ANOTHER
+  // account. Two people can abbreviate to the same display name ("Muhammad Irfan
+  // Bin Abdullah" and "Muhammad Hairul Naim Bin Abdullah" are both "Muhammad
+  // Abdullah"), and reusing that row would credit one person's attempts -- and,
+  // through /api/solo-results, their grade -- to the other.
+  const r = (conta
+    ? db()
+        .prepare(
+          `SELECT id FROM players
+            WHERE LOWER(real_name) = ? AND (account IS NULL OR account = '' OR account = ?)
+            ORDER BY last_seen_at DESC LIMIT 1`
+        )
+        .get(key, conta)
+    : db()
+        .prepare("SELECT id FROM players WHERE LOWER(real_name) = ? LIMIT 1")
+        .get(key)) as { id: string } | undefined
   return r?.id ?? null
 }
 
@@ -78,7 +92,7 @@ function findPlayerIdByAccount(account: string): string | null {
 
 function ensurePlayer(realName: string, username: string, account?: string): string {
   const conta = (account || "").trim().toLowerCase()
-  const existing = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName)
+  const existing = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName, conta)
   if (existing) {
     // Stamp the account on a row that predates it (or was created by a classic
     // game, where nobody authenticates). Only ever fills a blank: overwriting
@@ -136,7 +150,7 @@ export function getSoloQuizFor(quizId: string, realName: string, account?: strin
   let attemptsUsed = 0
   const conta = (account || "").trim().toLowerCase()
   if (conta || realName.trim()) {
-    const pid = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName)
+    const pid = (conta ? findPlayerIdByAccount(conta) : null) ?? findPlayerIdByName(realName, conta)
     if (pid) attemptsUsed = countAttempts(pid, quizId, conta)
   }
 
