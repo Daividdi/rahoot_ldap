@@ -6,6 +6,15 @@ const LDAP_SEARCH_BASE = process.env.LDAP_SEARCH_BASE || ''
 const LDAP_SVC_USER = process.env.LDAP_SERVICE_USER || ''
 const LDAP_SVC_PASS = process.env.LDAP_SERVICE_PASS || ''
 
+// Active Directory does not accept a simple bind with a bare account name. The
+// user bind already sends `user@domain`; a service account configured as just
+// "svcuser" gets the same treatment. UPN, DN and DOMAIN\user values pass through.
+function serviceBindName(): string {
+  const u = LDAP_SVC_USER.trim()
+  if (!u || !LDAP_DOMAIN || u.includes('@') || u.includes('=') || u.includes('\\')) return u
+  return `${u}@${LDAP_DOMAIN}`
+}
+
 // ── Minimal async LDAP client ─────────────────────────────────────────────
 // We only need BindRequest + SearchRequest, so we implement them inline
 // rather than pulling in a full LDAP library (avoids ESM/CJS bundling edge cases).
@@ -216,7 +225,7 @@ export async function ldapAuthenticate(username: string, password: string): Prom
     if (!displayName && LDAP_SVC_USER && LDAP_SVC_PASS) {
       conn.destroy()
       conn = await connect(host, port)
-      conn.write(buildBind(3, LDAP_SVC_USER, LDAP_SVC_PASS))
+      conn.write(buildBind(3, serviceBindName(), LDAP_SVC_PASS))
       const svcResp = await conn.read()
       if (parseResultCode(svcResp) === 0) {
         conn.write(buildSearch(4, LDAP_SEARCH_BASE, username, ['displayName']))
@@ -274,7 +283,7 @@ export async function lookupDisplayNamesForAccounts(accounts: string[]): Promise
 
       let bindResp: Buffer
       try {
-        conn.write(buildBind(1, LDAP_SVC_USER, LDAP_SVC_PASS))
+        conn.write(buildBind(1, serviceBindName(), LDAP_SVC_PASS))
         bindResp = await conn.read()
       } catch {
         console.warn('[ldap] display-name backfill skipped: service bind timed out or failed')
