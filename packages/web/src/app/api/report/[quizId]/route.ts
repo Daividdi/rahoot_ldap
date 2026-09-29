@@ -259,6 +259,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
           });
           rawData.selectedSession = sessaoPedida;
         }
+
+        // The default view is the quiz file's own `lastSessionStats`, written by
+        // the manager's browser when a live game ends. It only carries the
+        // abbreviated name the player joined with, so a report opened without
+        // picking a session showed "Muhamad Muzakir" where the AD says "Muhamad
+        // Ridhwan Bin Mohd Muzakir". Resolve it like the rows above: abbreviated
+        // name -> the AD account behind it -> full name. A name two accounts
+        // share stays abbreviated, and a manual correction always wins.
+        if (hasDisplayNames && Array.isArray(rawData.lastSessionStats)) {
+          const fullNameOf = db.prepare(
+            `SELECT MIN(n.full_name) AS fullName, COUNT(DISTINCT LOWER(i.account)) AS accounts
+               FROM ldap_identities i
+               LEFT JOIN account_display_names n ON n.account = LOWER(i.account)
+              WHERE LOWER(i.display_name) = LOWER(?)`
+          );
+          rawData.lastSessionStats = rawData.lastSessionStats.map((player: any) => {
+            const name = String(player?.realName || '').trim();
+            if (!name || (player.displayName && player.displayName !== name)) return player;
+            const found = fullNameOf.get(name) as { fullName: string | null; accounts: number } | undefined;
+            return found && Number(found.accounts) === 1 && found.fullName
+              ? { ...player, displayName: found.fullName }
+              : player;
+          });
+        }
         db.close();
       }
     } catch (e) {

@@ -38,11 +38,25 @@ async function backfillAccountDisplayNames(): Promise<void> {
   if (displayNameBackfillRunning) return
   displayNameBackfillRunning = true
   try {
+    // Every account ever seen: the ones linked to a player row AND the ones only
+    // in ldap_identities. A classic-game player is keyed by the abbreviated
+    // name and often has no `players.account`, so reading players alone left
+    // them out, and the report fell back to "Muhamad Muzakir" until that
+    // person happened to sign in again.
+    //
+    // The shared-name guard is for DISPLAY, not for storage: every account has
+    // exactly one full name. Applying it here made accounts that share an
+    // abbreviation look missing forever, so they were refetched every day and
+    // took slots in the 500-row batch from accounts that really lacked a name.
     const accounts = db().prepare(`
-      SELECT DISTINCT LOWER(p.account) AS account
-      FROM players p
-      LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
-      WHERE p.account IS NOT NULL AND TRIM(p.account) <> '' AND n.account IS NULL
+      SELECT account FROM (
+        SELECT LOWER(p.account) AS account FROM players p
+         WHERE p.account IS NOT NULL AND TRIM(p.account) <> ''
+        UNION
+        SELECT LOWER(i.account) FROM ldap_identities i
+         WHERE i.account IS NOT NULL AND TRIM(i.account) <> ''
+      ) a
+      WHERE NOT EXISTS (SELECT 1 FROM account_display_names n WHERE n.account = a.account)
       ORDER BY account
       LIMIT ?
     `).all(500) as Array<{ account: string }>
