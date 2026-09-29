@@ -368,6 +368,15 @@ function ensureAccountDisplayNamesTable(): void {
   )`)
 }
 
+function ensureAbbrevDisplayNamesTable(): void {
+  // Display-only fallback for classic-game abbreviations; never use this table for identity.
+  _db!.exec(`CREATE TABLE IF NOT EXISTS abbrev_display_names (
+    abbrev     TEXT PRIMARY KEY,
+    full_name  TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`)
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export const Database = {
@@ -380,7 +389,7 @@ export const Database = {
     _db.exec("PRAGMA journal_mode = WAL")
     _db.exec("PRAGMA foreign_keys = ON")
     _db.exec(SCHEMA_SQL)
-    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable(); ensurePlayerAccountColumn(); ensureAccountDisplayNamesTable()
+    console.log("[db] schema ready"); ensureAvatarKindColumns(); ensureLdapPlayersTable(); ensurePlayerAccountColumn(); ensureAccountDisplayNamesTable(); ensureAbbrevDisplayNamesTable()
 
     if (!isMigrated()) {
       console.log("[db] migrating history.json …")

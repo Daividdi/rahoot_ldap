@@ -14,7 +14,7 @@ import { getProfile } from "@rahoot/socket/services/profile"
 import { getSoloQuizFor, submitSoloAttempt, getSoloReview } from "@rahoot/socket/services/soloMode"
 import { snapshotClosedWeeks, getAllLeaderboards } from "@rahoot/socket/services/leaderboards"
 import { listAvatars, saveAvatarSelection } from "@rahoot/socket/services/avatars3d"
-import { ldapAuthenticate, lookupDisplayNamesForAccounts } from "@rahoot/socket/services/ldap"
+import { ldapAuthenticate, lookupDisplayNamesByAbbreviation, lookupDisplayNamesForAccounts } from "@rahoot/socket/services/ldap"
 import { Server as ServerIO } from "socket.io"
 import { createRequire as _createRequire } from "module"
 // Works in both ESM (dev/tsx) and CJS bundle (production)
@@ -93,6 +93,60 @@ async function backfillAccountDisplayNames(): Promise<void> {
 setImmediate(() => { void backfillAccountDisplayNames() })
 setInterval(() => { void backfillAccountDisplayNames() }, DISPLAY_NAME_BACKFILL_INTERVAL_MS).unref()
 
+let abbreviatedDisplayNameBackfillRunning = false
+
+async function backfillAbbreviatedDisplayNames(): Promise<void> {
+  if (abbreviatedDisplayNameBackfillRunning) return
+  abbreviatedDisplayNameBackfillRunning = true
+  try {
+    const abbreviations = db().prepare(`
+      SELECT lp.real_name AS abbrev
+        FROM ldap_players lp
+       WHERE TRIM(lp.real_name) <> ''
+         AND NOT EXISTS (
+           SELECT 1 FROM ldap_identities i
+            WHERE LOWER(i.display_name) = LOWER(lp.real_name)
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM abbrev_display_names a
+            WHERE LOWER(a.abbrev) = LOWER(lp.real_name)
+         )
+       ORDER BY LOWER(lp.real_name)
+       LIMIT 300
+    `).all() as Array<{ abbrev: string }>
+    if (abbreviations.length === 0) return
+
+    const names = await lookupDisplayNamesByAbbreviation(abbreviations.map(row => row.abbrev))
+    if (names.length === 0) return
+
+    const upsert = db().prepare(`
+      INSERT INTO abbrev_display_names (abbrev, full_name, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(abbrev) DO UPDATE SET
+        full_name = excluded.full_name,
+        updated_at = excluded.updated_at
+    `)
+    const updatedAt = new Date().toISOString()
+    let filled = 0
+    for (const name of names) {
+      try {
+        upsert.run(name.abbrev.trim().toLowerCase(), name.displayName.trim(), updatedAt)
+        filled++
+      } catch {
+        // A failed row must not prevent the remaining names from being saved.
+      }
+    }
+    if (filled > 0) console.log(`[ldap] backfilled ${filled} abbreviated display name(s)`)
+  } catch {
+    console.warn("[ldap] abbreviated display-name backfill skipped after a database error")
+  } finally {
+    abbreviatedDisplayNameBackfillRunning = false
+  }
+}
+
+setImmediate(() => { void backfillAbbreviatedDisplayNames() })
+setInterval(() => { void backfillAbbreviatedDisplayNames() }, DISPLAY_NAME_BACKFILL_INTERVAL_MS).unref()
+
 // A player row whose abbreviated name is shared by ANOTHER account (two people
 // who both abbreviate to e.g. "Muhammad Abdullah") keeps the abbreviated name:
 // classic games are keyed by that name, so the row can hold both people's games
@@ -106,6 +160,11 @@ function displayNameForLdapPlayer(realNameSql: string): string {
      AND LOWER(i.display_name) = LOWER(${realNameSql})
     LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
     WHERE p.real_name = ${realNameSql}
+  ), (
+    SELECT ab.full_name
+      FROM abbrev_display_names ab
+     WHERE ab.abbrev = LOWER(${realNameSql})
+       AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(${realNameSql}))
   ), ${realNameSql})`
 }
 
@@ -314,11 +373,12 @@ io.on("connection", (socket) => {
       const linhas = db()
         .prepare(
           `SELECT s.quiz_id AS quizId, s.quiz_title AS quizTitle, s.started_at AS startedAt,
-                  COALESCE(n.full_name, p.real_name) AS player, sp.answers_json AS answersJson
+                  COALESCE(n.full_name, ab.full_name, p.real_name) AS player, sp.answers_json AS answersJson
              FROM sessions s
              JOIN session_players sp ON sp.session_id = s.id
              JOIN players p ON p.id = sp.player_id
              LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+             LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
             WHERE s.mode = 'solo' ${quizId ? "AND s.quiz_id = ?" : ""}
             ORDER BY s.started_at DESC`
         )
@@ -386,7 +446,7 @@ io.on("connection", (socket) => {
       // Per-player aggregate (solo only) — all players
       const playerStats = d.prepare(`
         SELECT p.real_name,
-          COALESCE(n.full_name, p.real_name) AS display_name,
+          COALESCE(n.full_name, ab.full_name, p.real_name) AS display_name,
           COUNT(*) AS total_attempts,
           COUNT(DISTINCT sa.quiz_id) AS quizzes_played,
           SUM(sa.correct) AS total_correct,
@@ -397,6 +457,7 @@ io.on("connection", (socket) => {
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
         LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+        LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
         WHERE 1=1${saRange}
         GROUP BY sa.player_id
         ORDER BY avg_accuracy DESC, total_correct DESC
@@ -404,7 +465,7 @@ io.on("connection", (socket) => {
 
       // Per-player per-quiz detail — all players
       const detail = d.prepare(`
-        SELECT p.real_name, COALESCE(n.full_name, p.real_name) AS display_name, sa.quiz_id,
+        SELECT p.real_name, COALESCE(n.full_name, ab.full_name, p.real_name) AS display_name, sa.quiz_id,
           COALESCE(
             (SELECT quiz_title FROM sessions WHERE quiz_id = sa.quiz_id AND mode = 'solo' LIMIT 1),
             sa.quiz_id
@@ -417,6 +478,7 @@ io.on("connection", (socket) => {
         FROM solo_attempts sa
         JOIN players p ON p.id = sa.player_id
         LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+        LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
         WHERE 1=1${saRange}
         GROUP BY sa.player_id, sa.quiz_id
         ORDER BY p.real_name, sa.quiz_id
@@ -425,7 +487,7 @@ io.on("connection", (socket) => {
       // Per-player aggregate (team/classic only) — all players, no ldap filter
       const teamStats = d.prepare(`
         SELECT p.real_name,
-          COALESCE(n.full_name, p.real_name) AS display_name,
+          COALESCE(n.full_name, ab.full_name, p.real_name) AS display_name,
           COUNT(DISTINCT s.id) AS games_played,
           ROUND(AVG(sp.rank)) AS avg_rank,
           SUM(sp.correct) AS total_correct,
@@ -437,6 +499,7 @@ io.on("connection", (socket) => {
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
         LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+        LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
         WHERE 1=1${sRange}
         GROUP BY sp.player_id
         ORDER BY avg_accuracy DESC
@@ -459,7 +522,7 @@ io.on("connection", (socket) => {
 
       // Per-player per-quiz detail for team games
       const teamDetail = d.prepare(`
-        SELECT p.real_name, COALESCE(n.full_name, p.real_name) AS display_name, s.quiz_id, s.quiz_title,
+        SELECT p.real_name, COALESCE(n.full_name, ab.full_name, p.real_name) AS display_name, s.quiz_id, s.quiz_title,
           COUNT(DISTINCT s.id) AS sessions,
           SUM(sp.correct) AS total_correct,
           MAX(sp.points) AS best_points,
@@ -470,6 +533,7 @@ io.on("connection", (socket) => {
         JOIN sessions s ON sp.session_id = s.id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
         LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+        LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
         WHERE 1=1${sRange}
         GROUP BY sp.player_id, s.quiz_id
         ORDER BY p.real_name, s.quiz_id
@@ -496,12 +560,13 @@ io.on("connection", (socket) => {
       const arg = (date || month) as string
 
       const rows = db().prepare(`
-        SELECT p.real_name, COALESCE(n.full_name, p.real_name) AS display_name, s.quiz_id, s.quiz_title,
+        SELECT p.real_name, COALESCE(n.full_name, ab.full_name, p.real_name) AS display_name, s.quiz_id, s.quiz_title,
           sp.points, sp.correct, sp.incorrect, sp.unanswered
         FROM session_players sp
         JOIN sessions s ON s.id = sp.session_id AND s.mode = 'classic'
         JOIN players p ON p.id = sp.player_id
         LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+        LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
         WHERE ${where}
       `).all(arg)
 

@@ -73,7 +73,7 @@ function periodLeaderboard(
     .prepare(
       `SELECT sp.player_id  AS playerId,
               p.real_name   AS realName,
-              COALESCE(n.full_name, p.real_name) AS displayName,
+              COALESCE(n.full_name, ab.full_name, p.real_name) AS displayName,
               p.username    AS username,
               p.avatar_json AS avatarJson,
               p.avatar_kind AS avatarKind,
@@ -89,6 +89,7 @@ function periodLeaderboard(
          JOIN players  p ON p.id = sp.player_id
          JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
     LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+    LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
     LEFT JOIN player_progress pp ON pp.player_id = sp.player_id
         WHERE s.${column} = ? AND s.mode = 'classic'
         GROUP BY sp.player_id
@@ -201,11 +202,12 @@ export function getWeeklyHallOfFame(limitPeriods = 10): HallOfFameEntry[] {
   const fetchTop = db().prepare(
     `SELECT ws.rank, ws.points, ws.games, ws.player_id AS playerId,
             p.real_name AS realName,
-            COALESCE(n.full_name, p.real_name) AS displayName
+            COALESCE(n.full_name, ab.full_name, p.real_name) AS displayName
        FROM weekly_snapshots ws
        JOIN players p ON p.id = ws.player_id
        JOIN ldap_players lp ON LOWER(lp.real_name) = LOWER(p.real_name)
        LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))
+       LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))
       WHERE ws.week_iso = ? AND ws.rank <= 3
       ORDER BY ws.rank ASC`
   )

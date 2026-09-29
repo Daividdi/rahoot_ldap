@@ -41,7 +41,13 @@ function berOctet(s: string): Buffer {
 }
 
 function berInt(n: number): Buffer {
-  return Buffer.from([0x02, 0x01, n])
+  const bytes: number[] = []
+  do {
+    bytes.unshift(n & 0xff)
+    n >>>= 8
+  } while (n > 0)
+  if (bytes[0] & 0x80) bytes.unshift(0)
+  return berSeq(0x02, Buffer.from(bytes))
 }
 
 // Build an LDAPMessage envelope
@@ -75,6 +81,43 @@ function buildSearch(msgId: number, base: string, filter: string, attrs: string[
   const attrList  = Buffer.concat(attrs.map(a => berOctet(a)))
   const attrSeq   = berSeq(0x30, attrList)
   return ldapMsg(msgId, 3, Buffer.concat([baseOctet, scope, deref, sizeLimit, timeLimit, typesOnly, eqFilter, attrSeq]))
+}
+
+function berTaggedOctet(tag: number, value: string): Buffer {
+  const bytes = Buffer.from(value.trim(), 'utf8')
+  return Buffer.concat([Buffer.from([tag]), berLen(bytes.length), bytes])
+}
+
+function equalityFilter(attribute: string, value: string): Buffer {
+  return berSeq(0xa3, Buffer.concat([berOctet(attribute), berOctet(value.trim())]))
+}
+
+function buildAbbreviationFilter(first: string, last: string): Buffer {
+  const substringParts = berSeq(0x30, Buffer.concat([
+    berTaggedOctet(0x80, first),
+    berTaggedOctet(0x82, last),
+  ]))
+  const substring = berSeq(0xa4, Buffer.concat([berOctet('displayName'), substringParts]))
+  return berSeq(0xa0, Buffer.concat([
+    equalityFilter('objectCategory', 'person'),
+    equalityFilter('objectClass', 'user'),
+    substring,
+  ]))
+}
+
+function buildAbbreviationSearch(msgId: number, base: string, first: string, last: string): Buffer {
+  const baseOctet = berOctet(base)
+  const scope = Buffer.from([0x0a, 0x01, 0x02])
+  const deref = Buffer.from([0x0a, 0x01, 0x00])
+  const sizeLimit = berInt(0)
+  const timeLimit = Buffer.from([0x02, 0x01, 0x1e])
+  const typesOnly = Buffer.from([0x01, 0x01, 0x00])
+  const attrList = Buffer.concat(['displayName', 'sAMAccountName'].map(berOctet))
+  const attrSeq = berSeq(0x30, attrList)
+  return ldapMsg(msgId, 3, Buffer.concat([
+    baseOctet, scope, deref, sizeLimit, timeLimit, typesOnly,
+    buildAbbreviationFilter(first, last), attrSeq,
+  ]))
 }
 
 // UnbindRequest (tag 2)
@@ -160,11 +203,140 @@ function parseDisplayName(buf: Buffer): string | null {
   return parseAttributeValue(buf, 'displayName')
 }
 
+type BerTlv = { tag: number; contentStart: number; contentEnd: number; end: number }
+
+function readBerTlv(buffer: Buffer, offset: number): BerTlv | null {
+  if (offset >= buffer.length || offset + 2 > buffer.length) return null
+  const tag = buffer[offset]
+  const firstLength = buffer[offset + 1]
+  let headerLength = 2
+  let contentLength = firstLength
+  if (firstLength & 0x80) {
+    const lengthBytes = firstLength & 0x7f
+    if (lengthBytes === 0 || lengthBytes > 4) throw new Error('Invalid LDAP BER length')
+    if (offset + 2 + lengthBytes > buffer.length) return null
+    headerLength += lengthBytes
+    contentLength = 0
+    for (let i = 0; i < lengthBytes; i++) {
+      contentLength = contentLength * 256 + buffer[offset + 2 + i]
+    }
+  }
+  if (contentLength > 16 * 1024 * 1024) throw new Error('LDAP message is too large')
+  const contentStart = offset + headerLength
+  const end = contentStart + contentLength
+  if (end > buffer.length) return null
+  return { tag, contentStart, contentEnd: end, end }
+}
+
+function readBerInteger(buffer: Buffer, tlv: BerTlv): number {
+  if (tlv.tag !== 0x02 || tlv.contentEnd - tlv.contentStart < 1 || tlv.contentEnd - tlv.contentStart > 4) {
+    throw new Error('Invalid LDAP integer')
+  }
+  let value = 0
+  for (let i = tlv.contentStart; i < tlv.contentEnd; i++) value = value * 256 + buffer[i]
+  return value
+}
+
+function parseLdapMessage(buffer: Buffer): { messageId: number; operation: BerTlv } {
+  const root = readBerTlv(buffer, 0)
+  if (!root || root.tag !== 0x30 || root.end !== buffer.length) throw new Error('Invalid LDAP message')
+  const messageIdTlv = readBerTlv(buffer, root.contentStart)
+  if (!messageIdTlv || messageIdTlv.tag !== 0x02) throw new Error('LDAP message ID is missing')
+  const operation = readBerTlv(buffer, messageIdTlv.end)
+  if (!operation || operation.end !== root.contentEnd) throw new Error('LDAP operation is missing')
+  return { messageId: readBerInteger(buffer, messageIdTlv), operation }
+}
+
+function parseSearchEntry(buffer: Buffer, entry: BerTlv): { displayName: string; account: string } | null {
+  const objectName = readBerTlv(buffer, entry.contentStart)
+  if (!objectName || objectName.tag !== 0x04) return null
+  const attributes = readBerTlv(buffer, objectName.end)
+  if (!attributes || attributes.tag !== 0x30 || attributes.end !== entry.contentEnd) return null
+
+  let displayName = ''
+  let account = ''
+  let offset = attributes.contentStart
+  while (offset < attributes.contentEnd) {
+    const partialAttribute = readBerTlv(buffer, offset)
+    if (!partialAttribute || partialAttribute.tag !== 0x30) return null
+    const type = readBerTlv(buffer, partialAttribute.contentStart)
+    if (!type || type.tag !== 0x04) return null
+    const values = readBerTlv(buffer, type.end)
+    if (!values || values.tag !== 0x31) return null
+    const value = readBerTlv(buffer, values.contentStart)
+    if (value && value.tag === 0x04) {
+      const attributeName = buffer.slice(type.contentStart, type.contentEnd).toString('utf8').toLowerCase()
+      const attributeValue = buffer.slice(value.contentStart, value.contentEnd).toString('utf8').trim()
+      if (attributeName === 'displayname') displayName = attributeValue
+      if (attributeName === 'samaccountname') account = attributeValue
+    }
+    offset = partialAttribute.end
+  }
+  return displayName && account ? { displayName, account } : null
+}
+
+function parseLdapResultCode(buffer: Buffer, operation: BerTlv): number {
+  const resultCode = readBerTlv(buffer, operation.contentStart)
+  if (!resultCode || resultCode.tag !== 0x0a) throw new Error('Invalid LDAP result')
+  return readBerInteger(buffer, { ...resultCode, tag: 0x02 })
+}
+
+async function collectBindResultCode(readChunk: () => Promise<Buffer>, expectedMessageId: number): Promise<number> {
+  let pending = Buffer.alloc(0)
+  while (true) {
+    pending = Buffer.concat([pending, await readChunk()])
+    while (pending.length > 0) {
+      const messageTlv = readBerTlv(pending, 0)
+      if (!messageTlv) break
+      if (messageTlv.tag !== 0x30) throw new Error('Invalid LDAP message frame')
+      const message = pending.subarray(0, messageTlv.end)
+      pending = pending.subarray(messageTlv.end)
+      const parsed = parseLdapMessage(message)
+      if (parsed.messageId !== expectedMessageId) continue
+      if (parsed.operation.tag !== 0x61) throw new Error('Unexpected LDAP bind response')
+      return parseLdapResultCode(message, parsed.operation)
+    }
+  }
+}
+
+async function collectSearchResults(
+  readChunk: () => Promise<Buffer>,
+  expectedMessageId: number,
+): Promise<Array<{ displayName: string; account: string }>> {
+  let pending = Buffer.alloc(0)
+  const entries: Array<{ displayName: string; account: string }> = []
+
+  while (true) {
+    const chunk = await readChunk()
+    if (!chunk.length) continue
+    pending = Buffer.concat([pending, chunk])
+
+    while (pending.length > 0) {
+      const messageTlv = readBerTlv(pending, 0)
+      if (!messageTlv) break
+      if (messageTlv.tag !== 0x30) throw new Error('Invalid LDAP message frame')
+      const message = pending.subarray(0, messageTlv.end)
+      pending = pending.subarray(messageTlv.end)
+      const parsed = parseLdapMessage(message)
+      if (parsed.messageId !== expectedMessageId) continue
+      if (parsed.operation.tag === 0x64) {
+        const candidate = parseSearchEntry(message, parsed.operation)
+        if (candidate) entries.push(candidate)
+      } else if (parsed.operation.tag === 0x65) {
+        if (parseLdapResultCode(message, parsed.operation) !== 0) {
+          throw new Error('LDAP abbreviation search failed')
+        }
+        return entries
+      }
+    }
+  }
+}
+
 
 // Shorten a display name to fit the 20-char username limit.
 // Strategy: First [M.] Last  →  First Last  →  hard slice
 const PARTICLES = new Set(['de','da','do','dos','das','e','di','del','van','von'])
-function abbreviateForUsername(name: string, max = 20): string {
+export function abbreviateForUsername(name: string, max = 20): string {
   name = name.trim()
   if (name.length <= max) return name
   const parts = name.split(/\s+/).filter(Boolean)
@@ -320,4 +492,124 @@ export async function lookupDisplayNamesForAccounts(accounts: string[]): Promise
     console.warn(`[ldap] skipped ${failedLookups} display-name lookup(s)`)
   }
   return names
+}
+
+export type AbbreviationDisplayName = { abbrev: string; displayName: string; account: string }
+
+function matchingAbbreviationCandidates(
+  abbrev: string,
+  candidates: Array<{ displayName: string; account: string }>,
+): Map<string, { displayName: string; account: string }> {
+  const expected = abbrev.trim().toLowerCase()
+  const accounts = new Map<string, { displayName: string; account: string }>()
+  for (const candidate of candidates) {
+    const account = candidate.account.trim()
+    const displayName = candidate.displayName.trim()
+    if (!account || !displayName || abbreviateForUsername(displayName).toLowerCase() !== expected) continue
+    const key = account.toLowerCase()
+    if (!accounts.has(key)) accounts.set(key, { displayName, account })
+  }
+  return accounts
+}
+
+export const __test_buildAbbreviationFilter = buildAbbreviationFilter
+export const __test_collectSearchResults = collectSearchResults
+export const __test_selectUniqueAbbreviationMatch = (
+  abbrev: string,
+  candidates: Array<{ displayName: string; account: string }>,
+): AbbreviationDisplayName | null => {
+  const matches = matchingAbbreviationCandidates(abbrev, candidates)
+  if (matches.size !== 1) return null
+  const match = matches.values().next().value as { displayName: string; account: string }
+  return { abbrev: abbrev.trim(), displayName: match.displayName, account: match.account }
+}
+
+/** Resolve abbreviated LDAP player names to a unique full AD name for display only. */
+export async function lookupDisplayNamesByAbbreviation(names: string[]): Promise<AbbreviationDisplayName[]> {
+  let conn: LdapConn | null = null
+  let matched = 0
+  let ambiguous = 0
+  let notFound = 0
+  let failed = 0
+  const results: AbbreviationDisplayName[] = []
+  const logCounts = () => console.info(
+    `[ldap] abbreviation display-name lookup: matched=${matched} ambiguous=${ambiguous} not-found=${notFound} failed=${failed}`,
+  )
+
+  try {
+    const uniqueNames = [...new Map(names
+      .map(name => name.trim())
+      .filter(Boolean)
+      .map(name => [name.toLowerCase(), name] as const)).values()].slice(0, 300)
+    if (!uniqueNames.length) {
+      return []
+    }
+
+    if (!LDAP_SVC_USER || !LDAP_SVC_PASS) {
+      if (!missingServiceAccountLogged) {
+        console.warn('[ldap] abbreviation display-name backfill skipped: service account is not configured')
+        missingServiceAccountLogged = true
+      }
+      failed = uniqueNames.length
+      return []
+    }
+
+    const { host, port } = parseHost(LDAP_URL)
+    try {
+      conn = await connect(host, port)
+    } catch {
+      console.warn('[ldap] abbreviation display-name backfill skipped: directory is unavailable or timed out')
+      failed = uniqueNames.length
+      return []
+    }
+
+    try {
+      conn.write(buildBind(1, serviceBindName(), LDAP_SVC_PASS))
+      const bindResult = await collectBindResultCode(() => conn!.read(), 1)
+      if (bindResult !== 0) {
+        console.warn('[ldap] abbreviation display-name backfill skipped: service account bind failed')
+        failed = uniqueNames.length
+        return []
+      }
+    } catch {
+      console.warn('[ldap] abbreviation display-name backfill skipped: service bind timed out or failed')
+      failed = uniqueNames.length
+      return []
+    }
+
+    let messageId = 2
+    for (let index = 0; index < uniqueNames.length; index++) {
+      const abbrev = uniqueNames[index]
+      const parts = abbrev.split(/\s+/).filter(Boolean)
+      const first = parts[0] || ''
+      const last = parts[parts.length - 1] || first
+      try {
+        conn.write(buildAbbreviationSearch(messageId, LDAP_SEARCH_BASE, first, last))
+        const entries = await collectSearchResults(() => conn!.read(), messageId)
+        const matches = matchingAbbreviationCandidates(abbrev, entries)
+        if (matches.size === 1) {
+          const candidate = matches.values().next().value as { displayName: string; account: string }
+          results.push({ abbrev, displayName: candidate.displayName, account: candidate.account })
+          matched++
+        } else if (matches.size > 1) {
+          ambiguous++
+        } else {
+          notFound++
+        }
+        messageId++
+      } catch {
+        failed += uniqueNames.length - index
+        console.warn('[ldap] abbreviation display-name backfill stopped after an LDAP search failure')
+        break
+      }
+    }
+  } catch {
+    failed++
+    console.warn('[ldap] abbreviation display-name backfill stopped after an unexpected error')
+  } finally {
+    try { conn?.destroy() } catch {}
+    logCounts()
+  }
+
+  return results
 }

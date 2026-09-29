@@ -78,12 +78,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
         const hasDisplayNames = Boolean(db.prepare(
           "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
         ).get('account_display_names'));
+        const hasAbbrevDisplayNames = Boolean(db.prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+        ).get('abbrev_display_names'));
         // The full name is skipped when another account shares the abbreviated name:
-      // such a row can hold two people's classic games.
-      const displayNameSql = hasDisplayNames ? 'COALESCE(n.full_name, p.real_name)' : 'p.real_name';
-        const displayNameJoin = hasDisplayNames
-          ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))'
-          : '';
+        // such a row can hold two people's classic games.
+        const displayNameSql = `COALESCE(${hasDisplayNames ? 'n.full_name' : 'NULL'}, ${hasAbbrevDisplayNames ? 'ab.full_name' : 'NULL'}, p.real_name)`;
+        const displayNameJoin = [
+          hasDisplayNames
+            ? 'LEFT JOIN account_display_names n ON n.account = LOWER(p.account) AND NOT EXISTS (SELECT 1 FROM ldap_identities i2 WHERE LOWER(i2.display_name) = LOWER(p.real_name) AND LOWER(i2.account) <> LOWER(p.account))'
+            : '',
+          hasAbbrevDisplayNames
+            ? 'LEFT JOIN abbrev_display_names ab ON ab.abbrev = LOWER(p.real_name) AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(p.real_name))'
+            : '',
+        ].filter(Boolean).join('\n             ');
 
         rawData.sessions = db.prepare(
           `SELECT s.id, s.started_at AS startedAt, s.ended_at AS endedAt,
@@ -267,20 +275,40 @@ export async function GET(request: Request, { params }: { params: Promise<{ quiz
         // Ridhwan Bin Mohd Muzakir". Resolve it like the rows above: abbreviated
         // name -> the AD account behind it -> full name. A name two accounts
         // share stays abbreviated, and a manual correction always wins.
-        if (hasDisplayNames && Array.isArray(rawData.lastSessionStats)) {
-          const fullNameOf = db.prepare(
-            `SELECT MIN(n.full_name) AS fullName, COUNT(DISTINCT LOWER(i.account)) AS accounts
-               FROM ldap_identities i
-               LEFT JOIN account_display_names n ON n.account = LOWER(i.account)
-              WHERE LOWER(i.display_name) = LOWER(?)`
-          );
+        if ((hasDisplayNames || hasAbbrevDisplayNames) && Array.isArray(rawData.lastSessionStats)) {
+          const fullNameOf = hasDisplayNames
+            ? db.prepare(
+              `SELECT MIN(n.full_name) AS fullName, COUNT(DISTINCT LOWER(i.account)) AS accounts
+                 FROM ldap_identities i
+                 LEFT JOIN account_display_names n ON n.account = LOWER(i.account)
+                WHERE LOWER(i.display_name) = LOWER(?)`
+            )
+            : db.prepare(
+              `SELECT NULL AS fullName, COUNT(DISTINCT LOWER(i.account)) AS accounts
+                 FROM ldap_identities i
+                WHERE LOWER(i.display_name) = LOWER(?)`
+            );
+          const abbreviatedFullNameOf = hasAbbrevDisplayNames
+            ? db.prepare(
+              `SELECT ab.full_name AS fullName
+                 FROM abbrev_display_names ab
+                WHERE ab.abbrev = LOWER(?)
+                  AND NOT EXISTS (SELECT 1 FROM ldap_identities i3 WHERE LOWER(i3.display_name) = LOWER(?))
+                LIMIT 1`
+            )
+            : null;
           rawData.lastSessionStats = rawData.lastSessionStats.map((player: any) => {
             const name = String(player?.realName || '').trim();
             if (!name || (player.displayName && player.displayName !== name)) return player;
             const found = fullNameOf.get(name) as { fullName: string | null; accounts: number } | undefined;
-            return found && Number(found.accounts) === 1 && found.fullName
-              ? { ...player, displayName: found.fullName }
-              : player;
+            if (found && Number(found.accounts) === 1 && found.fullName) {
+              return { ...player, displayName: found.fullName };
+            }
+            if (found && Number(found.accounts) === 0 && abbreviatedFullNameOf) {
+              const abbreviated = abbreviatedFullNameOf.get(name, name) as { fullName: string } | undefined;
+              if (abbreviated?.fullName) return { ...player, displayName: abbreviated.fullName };
+            }
+            return player;
           });
         }
         db.close();
